@@ -41,6 +41,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | T2 | Tampering | TB2 | MITM between gateway and services | High | TLS + mTLS, custom CA trust, hostname check | Done |
 | T3 | Tampering | RabbitMQ | Modified or replayed event (Quantity, ProductId) | High | HMAC over type + timestamp + body, checked in a consume filter; rejects go to the _error queue (done). Replays within 5 min, AMQP TLS (planned) | Partial |
 | T4 | Tampering | Services, DB | SQL injection | Medium | EF Core parameterized queries; FluentValidation in Identity, Product | Partial (Inventory: no validators) |
+| T5 | Tampering | Build | Dependency confusion: shared AuthLibrary/ResponseLibrary are not on nuget.org, which hosts unrelated packages with the same names; a clean restore pulled AuthLibrary 2.0.0 | High | Exact packages bundled in each repo (nuget-local); nuget.config packageSourceMapping limits both names to that folder | Done |
 | R1 | Repudiation | Product, Inventory | No record of who changed products or stock | Medium | Audit log with user id (NameIdentifier) per write | Planned |
 | I1 | Info disclosure | Gateway | Exception messages and internal URLs in responses | Medium | Generic messages; details to server log | Done |
 | I2 | Info disclosure | Services | Dev exception page (stack trace) passed through gateway | Medium | Gateway replaces every downstream 5xx body with a generic message; direct calls blocked by mTLS | Done |
@@ -62,7 +63,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 
 | Status | Count |
 |---|---|
-| Done | 13 |
+| Done | 14 |
 | Partial | 6 |
 | Planned | 5 |
 | N/A | 1 |

@@ -60,7 +60,7 @@ No password or key is committed. Infrastructure and seed passwords live in a git
 
 ## 5. Threat Modelling and Mitigation
 
-We applied STRIDE (Shostack, 2014) to each component and trust boundary and rated each threat by likelihood and impact (Low, Medium or High). The model lists 25 threats; Appendix A has the full table. At the end of the project, 13 are mitigated, 6 partly mitigated, 5 planned and 1 not applicable.
+We applied STRIDE (Shostack, 2014) to each component and trust boundary and rated each threat by likelihood and impact (Low, Medium or High). The model lists 26 threats; Appendix A has the full table. At the end of the project, 14 are mitigated, 6 partly mitigated, 5 planned and 1 not applicable.
 
 The highest risks at the start were forged tokens (a signing secret shared by four services and committed to git), direct calls to services that bypass the gateway, password guessing, forged or altered queue events and an unbounded quantity that let one event create any number of records. All of these are now mitigated and tested.
 
@@ -82,7 +82,7 @@ All 33 attack cases pass. They cover forged, expired and wrongly signed tokens, 
 
 Semgrep reported five findings: four GitHub Actions referenced by a tag instead of a commit, which we accept as a low supply chain risk, and the deliberate `ValidateLifetime = false` in the refresh flow. Gitleaks found the old HS256 secret in the history of four repositories; it is no longer used and test A4 shows it is rejected. ZAP found no high risk issues. Its one medium alert is a false positive caused by our own SQL injection test data, and the missing HSTS header is expected in development mode.
 
-Testing also found real defects, which we fixed and retested. Forged tokens crashed the request instead of returning 401, because the framework placed the authentication middleware before our header middleware. The product list stayed cached for an hour after changes. ZAP reported three missing response headers and an unneeded static page on the gateway. A final end-to-end check found that the Inventory service could not call the Product service through the gateway, and that the resulting error page leaked a stack trace and the caller's token; the gateway now uses a certificate from our own authority and hides error bodies from the services.
+Testing also found real defects, which we fixed and retested. Forged tokens crashed the request instead of returning 401, because the framework placed the authentication middleware before our header middleware. The product list stayed cached for an hour after changes. ZAP reported three missing response headers and an unneeded static page on the gateway. A final end-to-end check found that the Inventory service could not call the Product service through the gateway, and that the resulting error page leaked a stack trace and the caller's token; the gateway now uses a certificate from our own authority and hides error bodies from the services. A restore on a clean machine also showed that our shared libraries were not on nuget.org, where unrelated packages use the same names: the build silently took a stranger's AuthLibrary 2.0.0. Each service now ships the exact packages and maps those names to them only.
 
 ## 7. Challenges and Lessons Learned
 
