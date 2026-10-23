@@ -179,6 +179,8 @@ var sqlProduct = r.Status == 200 ? await Send(client, HttpMethod.Get, $"{Gateway
 var all = await Send(client, HttpMethod.Get, ProductsAll, adminToken);
 Check("V2", "T4", "SQL injection as product name", "stored as text, table intact", $"create {r.Status}, list {all.Status}, literal stored: {sqlProduct.Body.Contains("DROP TABLE")}", r.Status == 200 && all.Status == 200 && sqlProduct.Body.Contains("DROP TABLE"));
 
+Check("V2b", "-", "New product appears in the cached product list", "listed", $"listed: {all.Body.Contains("DROP TABLE")}", all.Body.Contains("DROP TABLE"));
+
 r = await Send(client, HttpMethod.Get, Gateway + "/product-service/products/1%20OR%201=1", adminToken);
 Check("V3", "T4", "SQL injection in route id", "400/404, no data", Show(r), r.Status is 400 or 404);
 
@@ -235,6 +237,15 @@ foreach (var c in cases)
 r = await Send(client, HttpMethod.Get, ProductsAll, adminToken);
 var server = r.Response?.Headers.TryGetValues("Server", out var values) == true ? string.Join(",", values) : "(none)";
 Check("I1", "I3", "Server header on a proxied response", "(none)", server, server == "(none)");
+
+string HeaderValue(string name) => r.Response is null ? "" :
+    r.Response.Headers.TryGetValues(name, out var v) || r.Response.Content.Headers.TryGetValues(name, out v) ? string.Join(",", v) : "(none)";
+var securityHeaders = $"nosniff={HeaderValue("X-Content-Type-Options")}, CORP={HeaderValue("Cross-Origin-Resource-Policy")}, cache={HeaderValue("Cache-Control")}";
+Check("I3", "I1", "API security headers", "nosniff, same-origin, no-store", securityHeaders,
+    HeaderValue("X-Content-Type-Options") == "nosniff" && HeaderValue("Cross-Origin-Resource-Policy") == "same-origin" && HeaderValue("Cache-Control") == "no-store");
+
+r = await Send(client, HttpMethod.Get, Gateway + "/");
+Check("I4", "I3", "Static page at / (technology fingerprint)", "404", $"{r.Status}", r.Status == 404);
 
 r = await Send(client, HttpMethod.Post, ProductsCreate, adminToken, "{ not json");
 Check("I2", "I1", "Malformed JSON body", "400, no stack trace", $"{r.Status}, stack trace: {r.Body.Contains("   at ")}", r.Status == 400 && !r.Body.Contains("   at "));
