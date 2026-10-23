@@ -43,7 +43,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | T4 | Tampering | Services, DB | SQL injection | Medium | EF Core parameterized queries; FluentValidation in Identity, Product | Partial (Inventory: no validators) |
 | R1 | Repudiation | Product, Inventory | No record of who changed products or stock | Medium | Audit log with user id (NameIdentifier) per write | Planned |
 | I1 | Info disclosure | Gateway | Exception messages and internal URLs in responses | Medium | Generic messages; details to server log | Done |
-| I2 | Info disclosure | Services | Dev exception page (stack trace) passed through gateway | Medium | Run Production; UseExceptionHandler in services | Partial |
+| I2 | Info disclosure | Services | Dev exception page (stack trace) passed through gateway | Medium | Gateway replaces every downstream 5xx body with a generic message; direct calls blocked by mTLS | Done |
 | I3 | Info disclosure | Gateway | Server header fingerprinting | Low | Server/X-Powered-By stripped, incl. downstream copies | Done |
 | I4 | Info disclosure | Repos | Secrets in git: seed passwords, RabbitMQ creds, old HS256 secret in history | High | DB/broker/Redis/seed passwords moved to user-secrets (.env, git-ignored); HS256 secret in history but unused; all services share SQL sa login | Partial |
 | I5 | Info disclosure | Identity DB | Refresh tokens stored in plaintext | Medium | Store SHA-256 hash, constant-time compare | Planned |
@@ -62,8 +62,8 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 
 | Status | Count |
 |---|---|
-| Done | 12 |
-| Partial | 7 |
+| Done | 13 |
+| Partial | 6 |
 | Planned | 5 |
 | N/A | 1 |
 
