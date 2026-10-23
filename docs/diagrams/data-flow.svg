@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 660" width="1000" height="660" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker>
+  </defs>
+  <rect width="1000" height="660" fill="#ffffff"/>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#222">Data flow diagram (DFD level 1)</text>
+
+  <!-- External entity -->
+  <rect x="30" y="275" width="120" height="60" fill="#f4f4f4" stroke="#333" stroke-width="1.5"/>
+  <text x="90" y="303" font-size="14" font-weight="bold" text-anchor="middle">Client</text>
+  <text x="90" y="321" font-size="11" fill="#555" text-anchor="middle">user</text>
+
+  <!-- Processes -->
+  <circle cx="320" cy="305" r="62" fill="#eaf2fb" stroke="#1f5fa8" stroke-width="2"/>
+  <text x="320" y="300" font-size="13" font-weight="bold" text-anchor="middle">P1 API Gateway</text>
+  <text x="320" y="318" font-size="10" fill="#555" text-anchor="middle">verify JWT, permission</text>
+
+  <circle cx="560" cy="115" r="58" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="560" y="110" font-size="13" font-weight="bold" text-anchor="middle">P2 Identity</text>
+  <text x="560" y="128" font-size="10" fill="#555" text-anchor="middle">login, sign JWT</text>
+
+  <circle cx="560" cy="305" r="58" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="560" y="300" font-size="13" font-weight="bold" text-anchor="middle">P3 Product</text>
+  <text x="560" y="318" font-size="10" fill="#555" text-anchor="middle">validate, store, publish</text>
+
+  <circle cx="560" cy="505" r="58" fill="#eef7ee" stroke="#2e7d32" stroke-width="2"/>
+  <text x="560" y="500" font-size="13" font-weight="bold" text-anchor="middle">P4 Inventory</text>
+  <text x="560" y="518" font-size="10" fill="#555" text-anchor="middle">consume, adjust stock</text>
+
+  <!-- Data stores (open rectangles) -->
+  <g font-size="12">
+    <path d="M790,95 H970 M790,135 H970 M790,95 V135" fill="none" stroke="#333" stroke-width="1.5"/>
+    <text x="800" y="120"><tspan font-weight="bold">D1</tspan> IdentityDB</text>
+    <path d="M790,200 H970 M790,240 H970 M790,200 V240" fill="none" stroke="#333" stroke-width="1.5"/>
+    <text x="800" y="225"><tspan font-weight="bold">D5</tspan> Redis cache</text>
+    <path d="M790,285 H970 M790,325 H970 M790,285 V325" fill="none" stroke="#333" stroke-width="1.5"/>
+    <text x="800" y="310"><tspan font-weight="bold">D2</tspan> ProductDB</text>
+    <path d="M790,385 H970 M790,425 H970 M790,385 V425" fill="none" stroke="#333" stroke-width="1.5"/>
+    <text x="800" y="410"><tspan font-weight="bold">D4</tspan> RabbitMQ queues</text>
+    <path d="M790,485 H970 M790,525 H970 M790,485 V525" fill="none" stroke="#333" stroke-width="1.5"/>
+    <text x="800" y="510"><tspan font-weight="bold">D3</tspan> InventoryDB</text>
+  </g>
+
+  <!-- Flows -->
+  <g stroke="#333" stroke-width="1.5" fill="none">
+    <line x1="150" y1="292" x2="256" y2="292" marker-end="url(#a)"/>
+    <line x1="256" y1="320" x2="152" y2="320" marker-end="url(#a)"/>
+    <line x1="366" y1="263" x2="510" y2="148" marker-start="url(#a)" marker-end="url(#a)"/>
+    <line x1="618" y1="115" x2="788" y2="115" marker-start="url(#a)" marker-end="url(#a)"/>
+    <line x1="382" y1="305" x2="500" y2="305" marker-end="url(#a)"/>
+    <line x1="366" y1="347" x2="512" y2="470" marker-end="url(#a)"/>
+    <line x1="612" y1="280" x2="788" y2="222" marker-start="url(#a)" marker-end="url(#a)"/>
+    <line x1="618" y1="305" x2="788" y2="305" marker-start="url(#a)" marker-end="url(#a)"/>
+    <line x1="612" y1="330" x2="788" y2="400" marker-end="url(#a)"/>
+    <line x1="788" y1="415" x2="610" y2="478" marker-end="url(#a)"/>
+    <line x1="618" y1="505" x2="788" y2="505" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M505,525 C420,600 300,560 315,370" stroke-dasharray="5,4" marker-end="url(#a)"/>
+  </g>
+
+  <!-- Flow labels -->
+  <g font-size="11" fill="#1a1a1a">
+    <text x="203" y="285" text-anchor="middle">1 credentials</text>
+    <text x="203" y="272" text-anchor="middle">5 request + JWT</text>
+    <text x="155" y="338">4 JWT + refresh</text>
+    <text x="350" y="190">2 credentials /</text>
+    <text x="350" y="204">4 tokens (mTLS)</text>
+    <text x="703" y="107" text-anchor="middle">3 user, hash, refresh token</text>
+    <text x="441" y="297" text-anchor="middle">6 request + JWT</text>
+    <text x="440" y="395">6 request + JWT</text>
+    <text x="680" y="225" text-anchor="middle">12 cached products</text>
+    <text x="703" y="297" text-anchor="middle">7 product rows</text>
+    <text x="680" y="328">8 ProductCreated /</text>
+    <text x="680" y="342">ProductDeleted event</text>
+    <text x="705" y="478" text-anchor="middle">9 event</text>
+    <text x="703" y="497" text-anchor="middle">10 inventory items</text>
+    <text x="235" y="590">11 product lookup + user JWT (via gateway)</text>
+  </g>
+
+  <!-- Flow notes -->
+  <g font-size="11" fill="#333">
+    <text x="30" y="625"><tspan font-weight="bold">Login:</tspan> 1 -> 2 -> 3 -> 4.   <tspan font-weight="bold">Create product:</tspan> 5 -> 6 -> 7 -> 8 -> 9 -> 10 (eventual consistency).   <tspan font-weight="bold">Stock query:</tspan> 5 -> 6 -> 10 -> 11.</text>
+    <text x="30" y="645">Every request checks the JWT signature (RS256) and permission twice: at P1 and again in P2/P3/P4.</text>
+  </g>
+</svg>

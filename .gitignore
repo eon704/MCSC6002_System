@@ -1,0 +1,6 @@
+# Keys and certificates are never committed (generate locally, see service READMEs).
+keys/
+*.pem
+*.key
+*.pfx
+*.crt
