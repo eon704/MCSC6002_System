@@ -27,9 +27,11 @@ set_secrets ../MCSC6002_ProductService/ProductService/WebApi \
   "ConnectionStrings:DefaultConnection" "$(sql MCSC6002_ProductDB)" \
   "RabbitMqSettings:UserName" "$RABBITMQ_USER" \
   "RabbitMqSettings:Password" "$RABBITMQ_PASSWORD" \
+  "RabbitMqSettings:SigningKey" "$MESSAGE_SIGNING_KEY" \
   "CacheSettings:DestinationUrl" "127.0.0.1:6379,password=$REDIS_PASSWORD"
 
 set_secrets ../MCSC6002_InventoryService/InventoryService/WebApi \
   "ConnectionStrings:DefaultConnection" "$(sql MCSC6002_InventoryDB)" \
   "RabbitMqSettings:UserName" "$RABBITMQ_USER" \
-  "RabbitMqSettings:Password" "$RABBITMQ_PASSWORD"
+  "RabbitMqSettings:Password" "$RABBITMQ_PASSWORD" \
+  "RabbitMqSettings:SigningKey" "$MESSAGE_SIGNING_KEY"

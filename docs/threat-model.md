@@ -24,7 +24,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 |---|---|---|
 | TB1 | Internet -> API Gateway | HTTPS, JWT, permission check per route |
 | TB2 | Gateway -> services | mTLS, project CA only, CN=api-gateway |
-| TB3 | Services -> RabbitMQ | Dedicated broker user (no guest); plain AMQP, unsigned events |
+| TB3 | Services -> RabbitMQ | Dedicated broker user; HMAC-SHA256 signed events, 5-min replay window; plain AMQP |
 | TB4 | Services -> SQL Server, Redis | EF Core; SQL Encrypt=True (cert not verified); Redis password |
 | TB5 | Inventory -> Gateway (product lookup) | HTTPS, forwarded user JWT |
 
@@ -36,10 +36,10 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | S2 | Spoofing | All | Algorithm confusion (none, HS256, RS384) | High | ValidAlgorithms pinned to RS256 (incl. refresh) | Done |
 | S3 | Spoofing | Services | Direct call bypassing gateway | High | mTLS; services reject any client cert except gateway's | Done |
 | S4 | Spoofing | Identity | Password brute force / weak passwords | High | Gateway 5 req/min per IP on /auth/*; lockout after 5 failures (15 min); min 12 chars, 6 unique (NIST 800-63B), enforced on user creation | Done |
-| S5 | Spoofing | RabbitMQ | Fake events published with default credentials | High | Dedicated broker user from user-secrets (done); HMAC-signed events (planned) | Partial |
+| S5 | Spoofing | RabbitMQ | Fake events published by anyone with broker access | High | Dedicated broker user from user-secrets; Inventory accepts only events HMAC-signed with a key shared by Product and Inventory | Done |
 | T1 | Tampering | Gateway, services | Edited JWT payload (add permission) | High | Signature validated at gateway and again in service | Done |
 | T2 | Tampering | TB2 | MITM between gateway and services | High | TLS + mTLS, custom CA trust, hostname check | Done |
-| T3 | Tampering | RabbitMQ | Modified event (Quantity, ProductId) | High | HMAC per event, AMQP over TLS | Planned |
+| T3 | Tampering | RabbitMQ | Modified or replayed event (Quantity, ProductId) | High | HMAC over type + timestamp + body, checked in a consume filter; rejects go to the _error queue (done). Replays within 5 min, AMQP TLS (planned) | Partial |
 | T4 | Tampering | Services, DB | SQL injection | Medium | EF Core parameterized queries; FluentValidation in Identity, Product | Partial (Inventory: no validators) |
 | R1 | Repudiation | Product, Inventory | No record of who changed products or stock | Medium | Audit log with user id (NameIdentifier) per write | Planned |
 | I1 | Info disclosure | Gateway | Exception messages and internal URLs in responses | Medium | Generic messages; details to server log | Done |
@@ -49,7 +49,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | I5 | Info disclosure | Identity DB | Refresh tokens stored in plaintext | Medium | Store SHA-256 hash, constant-time compare | Planned |
 | I6 | Info disclosure | JWT | Email and phone in readable token payload | Low | Keep only id and permissions | Planned |
 | I7 | Info disclosure | TB4 | SQL traffic unencrypted | Medium | Encrypt=True (done); trusted server cert instead of TrustServerCertificate=True (planned) | Partial |
-| D1 | DoS | Inventory | ProductCreated.Quantity unbounded; consumer creates one row per unit | High | Max quantity in validator and consumer | Planned |
+| D1 | DoS | Inventory | ProductCreated.Quantity unbounded; consumer creates one row per unit | High | Quantity 1..1000 in Product validators and again in the Inventory consumer | Done |
 | D2 | DoS | Gateway | No request rate limiting | Medium | Per-IP limit on /auth/* (done); other routes (planned) | Partial |
 | D3 | DoS | All | Oversized bodies (Kestrel default ~28 MB) | Low | Lower MaxRequestBodySize | Planned |
 | E1 | EoP | Gateway, services | Basic user calls admin endpoint (BFLA) | High | Permission claim at gateway (RouteClaimsRequirement) + [HasPermission] in service | Done |
@@ -62,13 +62,13 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 
 | Status | Count |
 |---|---|
-| Done | 10 |
+| Done | 12 |
 | Partial | 7 |
-| Planned | 7 |
+| Planned | 5 |
 | N/A | 1 |
 
 ## Top open risks
 
-- S5, T3: queue events not signed; any broker user can forge stock changes.
-- D1: unbounded Quantity in events.
 - I5: refresh tokens stored in plaintext.
+- T3: AMQP not encrypted; signed events can be replayed within 5 minutes.
+- R1: no audit log of who changed products or stock.
