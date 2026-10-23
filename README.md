@@ -6,7 +6,7 @@ Needs Docker Desktop, the .NET 10 SDK and Git Bash. Clone all six repos into one
 
 ```bash
 bash scripts/setup.sh    # once: JWT keys, mTLS certs, .env with random passwords, user-secrets
-bash scripts/run.sh      # SQL Server, RabbitMQ, Redis in Docker; the four services in the background
+bash scripts/run.sh      # SQL Server, RabbitMQ (TLS), Redis in Docker; the four services in the background
 bash scripts/demo.sh     # step-by-step demo, or: dotnet run tests/AttackTests.cs
 bash scripts/run.sh stop # stop the services (docker compose stop for the infrastructure)
 ```

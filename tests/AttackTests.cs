@@ -175,6 +175,32 @@ Check("N2", "S3", "Direct call, self-signed cert CN=api-gateway", "TLS handshake
 r = await Send(client, HttpMethod.Get, "http://localhost:5044/api/token/login");
 Check("N3", "T2", "Plain HTTP to a service (old HTTP port)", "no listener", Show(r), r.Status == 0);
 
+async Task<bool> PortOpen(int port)
+{
+    using var tcp = new System.Net.Sockets.TcpClient();
+    try { await tcp.ConnectAsync("127.0.0.1", port); return true; }
+    catch (System.Net.Sockets.SocketException) { return false; }
+}
+var projectCa = X509CertificateLoader.LoadCertificateFromFile("../keys/tls/ca.crt");
+var brokerCertificate = "no TLS";
+using (var tcp = new System.Net.Sockets.TcpClient())
+{
+    await tcp.ConnectAsync("127.0.0.1", 5671);
+    using var tls = new System.Net.Security.SslStream(tcp.GetStream(), false, (_, certificate, _, _) =>
+    {
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(projectCa);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        brokerCertificate = certificate is X509Certificate2 c && chain.Build(c) ? "project CA" : "untrusted";
+        return true;
+    });
+    await tls.AuthenticateAsClientAsync("localhost");
+    brokerCertificate += $", {tls.SslProtocol}";
+}
+var plainAmqp = await PortOpen(5672);
+Check("N4", "T3", "RabbitMQ: plain AMQP port, then TLS port", "5672 closed; 5671 TLS, project CA", $"5672 {(plainAmqp ? "open" : "closed")}; 5671 {brokerCertificate}", !plainAmqp && brokerCertificate.StartsWith("project CA"));
+
 // ---------- Input validation ----------
 r = await Send(asGateway, HttpMethod.Post, Identity + "/api/token/login", body: new { userName = "' OR '1'='1' --", password = "' OR '1'='1' --" });
 Check("V1", "T4", "SQL injection in login", "rejected, no 500", Show(r), r.Status == 400);

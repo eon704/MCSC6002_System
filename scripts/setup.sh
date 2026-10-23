@@ -39,6 +39,18 @@ if [ ! -f "$KEYS/tls/ca.crt" ]; then
   echo "created project CA, service and gateway certificates"
 fi
 
+# Separate from the CA block so existing key folders get it too.
+if [ ! -f "$KEYS/tls/rabbitmq.crt" ]; then
+  (
+    cd "$KEYS/tls"
+    openssl req -new -newkey rsa:2048 -nodes -keyout rabbitmq.key -out rabbitmq.csr -subj "/CN=rabbitmq" 2> /dev/null
+    printf "basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n" > rabbitmq.ext
+    openssl x509 -req -in rabbitmq.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out rabbitmq.crt -days 825 -extfile rabbitmq.ext 2> /dev/null
+    rm -f rabbitmq.csr rabbitmq.ext ca.srl
+  )
+  echo "created RabbitMQ certificate"
+fi
+
 # Letters and digits only, plus a fixed tail for SQL Server's complexity rule; no ; or , (connection strings).
 secret() { echo "$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)Aa1-"; }
 

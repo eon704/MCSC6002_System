@@ -22,6 +22,10 @@ The Identity service manages users, roles and permissions and issues tokens. The
 
 Each service has its own SQL Server database. The Product service caches its product list in Redis. The services use .NET 10 with Clean Architecture, CQRS through MediatR, Entity Framework Core, FluentValidation and ASP.NET Core Identity, and MassTransit for RabbitMQ. Two shared NuGet libraries hold the permission constants and the request and response contracts. For local runs, SQL Server, RabbitMQ and Redis start with Docker Compose and the services run with `dotnet run`.
 
+### Changes from the proposal
+
+Three points differ from the proposal. Docker Compose runs SQL Server, RabbitMQ and Redis, but the four services run on the host, started together by one script (`scripts/run.sh`); container images for the services are future work. Users cannot register themselves: an administrator creates accounts, which suits an internal company inventory system. Queue messages are not encrypted field by field. The connection to RabbitMQ uses TLS, and events carry only product ids, names and quantities, so TLS in transit and the HMAC signature cover the risk.
+
 ## 3. Architecture Design
 
 Figure 1 shows the network zones and which links are encrypted. Figure 2 is a level 1 data flow diagram with the three main flows: login, product creation (including the event to Inventory) and stock queries. Figure 3 marks the five trust boundaries used in the threat model.
@@ -44,7 +48,7 @@ Authorization is permission based. The gateway checks the permission claim requi
 
 ### 4.2 Secure communication
 
-Clients reach the gateway over HTTPS, with HSTS outside development. Between the gateway and the services we use mutual TLS. A project certificate authority issues a client certificate to the gateway, and each service accepts only a client certificate issued by that CA with the name `api-gateway`. The gateway in turn accepts only service certificates from the same CA and checks the host name. The services no longer listen on plain HTTP, so even a host inside the network cannot call a service directly.
+Clients reach the gateway over HTTPS, with HSTS outside development. Between the gateway and the services we use mutual TLS. A project certificate authority issues a client certificate to the gateway, and each service accepts only a client certificate issued by that CA with the name `api-gateway`. The gateway in turn accepts only service certificates from the same CA and checks the host name. The services no longer listen on plain HTTP, so even a host inside the network cannot call a service directly. The connection to RabbitMQ also uses TLS: the broker listens only on its TLS port, with a certificate from the same CA, and the services check that certificate and its host name.
 
 ### 4.3 Hashing and integrity
 
@@ -69,16 +73,16 @@ Broken object level authorization, the first item in the OWASP API Security Top 
 The main remaining risks are:
 
 - a leaked refresh token can be used once, because reuse is not detected;
-- RabbitMQ traffic is not encrypted, and a signed event can be replayed within the five-minute window;
+- a signed event can be replayed within the five-minute window;
 - the HMAC key is shared, so the Inventory service could also forge events;
 - there is no audit log of who changed products or stock;
 - account lockout lets an attacker lock a known account on purpose.
 
 ## 6. Testing and Validation
 
-We tested in four ways. A scripted suite of 36 attack cases (Appendix B) runs against the live system, and each case maps to a threat ID. Semgrep scanned the source of all seven repositories, Gitleaks scanned their git history and OWASP ZAP ran an authenticated active scan of all 19 gateway routes.
+We tested in four ways. A scripted suite of 37 attack cases (Appendix B) runs against the live system, and each case maps to a threat ID. Semgrep scanned the source of all seven repositories, Gitleaks scanned their git history and OWASP ZAP ran an authenticated active scan of all 19 gateway routes.
 
-All 36 attack cases pass. They cover forged, expired and wrongly signed tokens, privilege escalation, refresh token reuse and use after logout, rate limiting and lockout, direct calls to services without the gateway certificate, SQL injection and oversized or malformed input, and events published straight to RabbitMQ by an attacker with broker credentials.
+All 37 attack cases pass. They cover forged, expired and wrongly signed tokens, privilege escalation, refresh token reuse and use after logout, rate limiting and lockout, direct calls to services without the gateway certificate, plain connections to the message broker, SQL injection and oversized or malformed input, and events published straight to RabbitMQ by an attacker with broker credentials.
 
 Semgrep reported five findings: four GitHub Actions referenced by a tag instead of a commit, which we accept as a low supply chain risk, and the deliberate `ValidateLifetime = false` in the refresh flow. Gitleaks found the old HS256 secret in the history of four repositories; it is no longer used and test A4 shows it is rejected. ZAP found no high risk issues. Its one medium alert is a false positive caused by our own SQL injection test data, and the missing HSTS header is expected in development mode.
 
@@ -92,11 +96,11 @@ Several defects appeared only when we attacked the running system: the middlewar
 
 ## 8. Conclusion
 
-The prototype delivers the security controls promised in the proposal: RS256 tokens with short lifetimes and hashed, rotating refresh tokens, permission checks at the gateway and in every service, mutual TLS between them, signed queue events, input validation and protection against password guessing. The threat model and the test results show how each control maps to a threat and that it works. The remaining work is encryption of RabbitMQ traffic, refresh token reuse detection, an audit log and container images for the services themselves.
+The prototype delivers the security controls promised in the proposal: RS256 tokens with short lifetimes and hashed, rotating refresh tokens, permission checks at the gateway and in every service, mutual TLS between them, TLS to the message broker, signed queue events, input validation and protection against password guessing. The threat model and the test results show how each control maps to a threat and that it works. The remaining work is refresh token reuse detection, protection against replayed events, an audit log and container images for the services themselves.
 
 ## Team Contributions
 
-Mario Silveira built the Identity, Product and Inventory services, the shared libraries and their build pipelines. Arman Akhmetov built the token and gateway security (RS256 signing and validation, route permissions, mutual TLS, rate limiting, lockout and password policy, refresh token hashing and revocation, error handling), the message signing, the local infrastructure, the threat model and diagrams, and the testing, and wrote this report.
+Mario Silveira built the Identity, Product and Inventory services, the shared libraries and their build pipelines. Arman Akhmetov built the token and gateway security (RS256 signing and validation, route permissions, mutual TLS, rate limiting, lockout and password policy, refresh token hashing and revocation, error handling), the message signing and broker TLS, the local infrastructure, the threat model and diagrams, and the testing, and wrote this report.
 
 ## References
 

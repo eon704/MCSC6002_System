@@ -7,12 +7,12 @@ Secure Microservices Inventory System. Test run of 2026-10-23.
 | Item | Detail |
 |---|---|
 | Target | Gateway and three services run locally; SQL Server, RabbitMQ, Redis in Docker |
-| Attack cases | `tests/AttackTests.cs`: 36 scripted cases, each tied to a threat ID in `threat-model.md` |
+| Attack cases | `tests/AttackTests.cs`: 37 scripted cases, each tied to a threat ID in `threat-model.md` |
 | SAST | Semgrep (p/csharp, p/secrets, p/owasp-top-ten), all 7 repositories |
 | Secret scan | Gitleaks, full git history of all 7 repositories |
 | DAST | OWASP ZAP active API scan of all 19 gateway routes, authenticated |
 
-## Attack cases (36/36 passed)
+## Attack cases (37/37 passed)
 
 | ID | Threat | Case | Expected | Result |
 |---|---|---|---|---|
@@ -33,6 +33,7 @@ Secure Microservices Inventory System. Test run of 2026-10-23.
 | N1 | S3 | Direct call to a service, no client certificate | TLS handshake fails | Handshake fails |
 | N2 | S3 | Direct call with self-signed cert CN=api-gateway | TLS handshake fails | Handshake fails |
 | N3 | T2 | Plain HTTP to a service | No listener | Connection refused |
+| N4 | T3 | RabbitMQ: plain AMQP port, then TLS port | 5672 closed; 5671 TLS, project CA cert | Closed; TLS 1.3, project CA |
 | V1 | T4 | SQL injection in login (`' OR '1'='1' --`) | Rejected, no 500 | 400 Invalid credentials |
 | V2 | T4 | SQL injection as product name | Stored as text | Stored literally, table intact |
 | V2b | - | New product appears in the (cached) product list | Listed | Listed |

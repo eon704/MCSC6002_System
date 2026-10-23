@@ -49,7 +49,7 @@
   <text x="847" y="284" font-size="11" fill="#555" text-anchor="middle">product query cache</text>
 
   <rect x="745" y="335" width="205" height="55" rx="6" fill="#fff" stroke="#8a6d3b"/>
-  <text x="847" y="358" font-size="14" font-weight="bold" text-anchor="middle">RabbitMQ :5672</text>
+  <text x="847" y="358" font-size="14" font-weight="bold" text-anchor="middle">RabbitMQ :5671 (TLS)</text>
   <text x="847" y="376" font-size="11" fill="#555" text-anchor="middle">MassTransit, product events</text>
 
   <!-- Links: green = encrypted, orange = not encrypted -->
@@ -71,15 +71,15 @@
   <text x="702" y="128" font-size="10" fill="#e65100" text-anchor="middle">TDS</text>
 
   <line x1="660" y1="305" x2="743" y2="272" stroke="#e65100" stroke-width="2" marker-end="url(#o)"/>
-  <line x1="660" y1="330" x2="743" y2="358" stroke="#e65100" stroke-width="2" marker-end="url(#o)"/>
-  <text x="703" y="362" font-size="10" fill="#e65100" text-anchor="middle">AMQP</text>
-  <line x1="745" y1="385" x2="662" y2="475" stroke="#e65100" stroke-width="2" marker-end="url(#o)"/>
+  <line x1="660" y1="330" x2="743" y2="358" stroke="#2e7d32" stroke-width="2" marker-end="url(#g)"/>
+  <text x="703" y="362" font-size="10" fill="#2e7d32" text-anchor="middle">AMQPS</text>
+  <line x1="745" y1="385" x2="662" y2="475" stroke="#2e7d32" stroke-width="2" marker-end="url(#g)"/>
 
   <!-- Legend -->
   <line x1="40" y1="600" x2="80" y2="600" stroke="#2e7d32" stroke-width="2"/>
-  <text x="88" y="604" font-size="11">Encrypted (HTTPS / mTLS)</text>
-  <line x1="260" y1="600" x2="300" y2="600" stroke="#e65100" stroke-width="2"/>
-  <text x="308" y="604" font-size="11">Weak (SQL TLS without cert check, plain AMQP, Redis)</text>
+  <text x="88" y="604" font-size="11">Encrypted (HTTPS / mTLS / AMQPS)</text>
+  <line x1="320" y1="600" x2="360" y2="600" stroke="#e65100" stroke-width="2"/>
+  <text x="368" y="604" font-size="11">Weak (SQL TLS without cert check, Redis)</text>
   <line x1="660" y1="600" x2="700" y2="600" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="5,4"/>
   <text x="708" y="604" font-size="11">Service-initiated call via gateway</text>
 </svg>

@@ -24,7 +24,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 |---|---|---|
 | TB1 | Internet -> API Gateway | HTTPS, JWT, permission check per route |
 | TB2 | Gateway -> services | mTLS, project CA only, CN=api-gateway |
-| TB3 | Services -> RabbitMQ | Dedicated broker user; HMAC-SHA256 signed events, 5-min replay window; plain AMQP |
+| TB3 | Services -> RabbitMQ | Dedicated broker user; AMQP over TLS only (project CA cert, checked by services); HMAC-SHA256 signed events, 5-min replay window |
 | TB4 | Services -> SQL Server, Redis | EF Core; SQL Encrypt=True (cert not verified); Redis password |
 | TB5 | Inventory -> Gateway (product lookup) | HTTPS, forwarded user JWT |
 
@@ -39,7 +39,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | S5 | Spoofing | RabbitMQ | Fake events published by anyone with broker access | High | Dedicated broker user from user-secrets; Inventory accepts only events HMAC-signed with a key shared by Product and Inventory | Done |
 | T1 | Tampering | Gateway, services | Edited JWT payload (add permission) | High | Signature validated at gateway and again in service | Done |
 | T2 | Tampering | TB2 | MITM between gateway and services | High | TLS + mTLS, custom CA trust, hostname check | Done |
-| T3 | Tampering | RabbitMQ | Modified or replayed event (Quantity, ProductId) | High | HMAC over type + timestamp + body, checked in a consume filter; rejects go to the _error queue (done). Replays within 5 min, AMQP TLS (planned) | Partial |
+| T3 | Tampering | RabbitMQ | Modified or replayed event (Quantity, ProductId) | High | HMAC over type + timestamp + body, checked in a consume filter; rejects go to the _error queue (done). AMQP over TLS with project CA cert, plain port closed (done). Replays within 5 min (planned) | Partial |
 | T4 | Tampering | Services, DB | SQL injection | Medium | EF Core parameterized queries; FluentValidation in all three services (Inventory: known statuses only) | Done |
 | T5 | Tampering | Build | Dependency confusion: shared AuthLibrary/ResponseLibrary are not on nuget.org, which hosts unrelated packages with the same names; a clean restore pulled AuthLibrary 2.0.0 | High | Exact packages bundled in each repo (nuget-local); nuget.config packageSourceMapping limits both names to that folder | Done |
 | R1 | Repudiation | Product, Inventory | No record of who changed products or stock | Medium | Audit log with user id (NameIdentifier) per write | Planned |
@@ -70,6 +70,6 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 
 ## Top open risks
 
-- T3: AMQP not encrypted; signed events can be replayed within 5 minutes.
+- T3: signed events can be replayed within 5 minutes.
 - R1: no audit log of who changed products or stock.
 - E3: a leaked refresh token works once; no reuse detection.
