@@ -5,6 +5,7 @@ keys/
 *.pfx
 *.crt
 .env
+logs/
 tests/zap/token.txt
 tests/zap/openapi.json
 tests/zap/zap-report.*

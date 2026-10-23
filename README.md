@@ -1,12 +1,14 @@
 # MCSC6002_System
 System-level artifacts for the Secure Microservices Inventory System: threat model, architecture diagrams, deployment.
 
-## Local infrastructure
-SQL Server, RabbitMQ and Redis run in Docker; the services run on the host with `dotnet run`.
+## Run it
+Needs Docker Desktop, the .NET 10 SDK and Git Bash. Clone all six repos into one folder, then from `MCSC6002_System`:
 
 ```bash
-cp .env.example .env   # then set the passwords
-docker compose up -d
+bash scripts/setup.sh    # once: JWT keys, mTLS certs, .env with random passwords, user-secrets
+bash scripts/run.sh      # SQL Server, RabbitMQ, Redis in Docker; the four services in the background
+bash scripts/demo.sh     # step-by-step demo, or: dotnet run tests/AttackTests.cs
+bash scripts/run.sh stop # stop the services (docker compose stop for the infrastructure)
 ```
 
-RabbitMQ management UI: http://localhost:15672 (user/password from `.env`).
+Keys and certificates go to `../keys` (outside every repo). Service logs: `logs/`. Seeded users: `admin@cloudbase.com` and `basic@cloudbase.com`, passwords in `.env`. Gateway: https://localhost:7000. RabbitMQ management UI: http://localhost:15672.
