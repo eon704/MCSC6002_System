@@ -19,7 +19,9 @@ set_secrets() {
 }
 
 set_secrets ../MCSC6002_IdentityService/IdentityService/WebApi \
-  "ConnectionStrings:DefaultConnection" "$(sql MCSC6002_IdentityDB)"
+  "ConnectionStrings:DefaultConnection" "$(sql MCSC6002_IdentityDB)" \
+  "SeedCredentials:AdminPassword" "$SEED_ADMIN_PASSWORD" \
+  "SeedCredentials:BasicPassword" "$SEED_BASIC_PASSWORD"
 
 set_secrets ../MCSC6002_ProductService/ProductService/WebApi \
   "ConnectionStrings:DefaultConnection" "$(sql MCSC6002_ProductDB)" \

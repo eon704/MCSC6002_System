@@ -24,8 +24,8 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 |---|---|---|
 | TB1 | Internet -> API Gateway | HTTPS, JWT, permission check per route |
 | TB2 | Gateway -> services | mTLS, project CA only, CN=api-gateway |
-| TB3 | Services -> RabbitMQ | None yet (plain AMQP, guest/guest) |
-| TB4 | Services -> SQL Server, Redis | EF Core; connections not encrypted, Redis without auth |
+| TB3 | Services -> RabbitMQ | Dedicated broker user (no guest); plain AMQP, unsigned events |
+| TB4 | Services -> SQL Server, Redis | EF Core; SQL Encrypt=True (cert not verified); Redis password |
 | TB5 | Inventory -> Gateway (product lookup) | HTTPS, forwarded user JWT |
 
 ## Threats
@@ -35,8 +35,8 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | S1 | Spoofing | All | Forged JWT using shared HS256 secret (was in 4 configs) | High | RS256; private key only in Identity, others get public key | Done |
 | S2 | Spoofing | All | Algorithm confusion (none, HS256, RS384) | High | ValidAlgorithms pinned to RS256 (incl. refresh) | Done |
 | S3 | Spoofing | Services | Direct call bypassing gateway | High | mTLS; services reject any client cert except gateway's | Done |
-| S4 | Spoofing | Identity | Password brute force (min length 6, seed pwd 123456, no lockout) | High | Gateway: 5 req/min per IP on /auth/* (429); planned: Identity lockout, stronger policy | Partial |
-| S5 | Spoofing | RabbitMQ | Fake events published with default credentials | High | Dedicated broker users, HMAC-signed events | Open |
+| S4 | Spoofing | Identity | Password brute force / weak passwords | High | Gateway 5 req/min per IP on /auth/*; lockout after 5 failures (15 min); min 12 chars, 6 unique (NIST 800-63B), enforced on user creation | Done |
+| S5 | Spoofing | RabbitMQ | Fake events published with default credentials | High | Dedicated broker user from user-secrets (done); HMAC-signed events (planned) | Partial |
 | T1 | Tampering | Gateway, services | Edited JWT payload (add permission) | High | Signature validated at gateway and again in service | Done |
 | T2 | Tampering | TB2 | MITM between gateway and services | High | TLS + mTLS, custom CA trust, hostname check | Done |
 | T3 | Tampering | RabbitMQ | Modified event (Quantity, ProductId) | High | HMAC per event, AMQP over TLS | Planned |
@@ -45,12 +45,12 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | I1 | Info disclosure | Gateway | Exception messages and internal URLs in responses | Medium | Generic messages; details to server log | Done |
 | I2 | Info disclosure | Services | Dev exception page (stack trace) passed through gateway | Medium | Run Production; UseExceptionHandler in services | Partial |
 | I3 | Info disclosure | Gateway | Server header fingerprinting | Low | Server/X-Powered-By stripped, incl. downstream copies | Done |
-| I4 | Info disclosure | Repos | Secrets in git: seed passwords, RabbitMQ creds, old HS256 secret in history | High | Env vars, User Secrets, Docker secrets; HS256 secret no longer used | Planned |
+| I4 | Info disclosure | Repos | Secrets in git: seed passwords, RabbitMQ creds, old HS256 secret in history | High | DB/broker/Redis/seed passwords moved to user-secrets (.env, git-ignored); HS256 secret in history but unused; all services share SQL sa login | Partial |
 | I5 | Info disclosure | Identity DB | Refresh tokens stored in plaintext | Medium | Store SHA-256 hash, constant-time compare | Planned |
 | I6 | Info disclosure | JWT | Email and phone in readable token payload | Low | Keep only id and permissions | Planned |
-| I7 | Info disclosure | TB4 | SQL traffic unencrypted (Encrypt=False) | Medium | Encrypt=True with trusted cert | Planned |
+| I7 | Info disclosure | TB4 | SQL traffic unencrypted | Medium | Encrypt=True (done); trusted server cert instead of TrustServerCertificate=True (planned) | Partial |
 | D1 | DoS | Inventory | ProductCreated.Quantity unbounded; consumer creates one row per unit | High | Max quantity in validator and consumer | Planned |
-| D2 | DoS | Gateway | No request rate limiting | Medium | Ocelot RateLimitOptions | Planned |
+| D2 | DoS | Gateway | No request rate limiting | Medium | Per-IP limit on /auth/* (done); other routes (planned) | Partial |
 | D3 | DoS | All | Oversized bodies (Kestrel default ~28 MB) | Low | Lower MaxRequestBodySize | Planned |
 | E1 | EoP | Gateway, services | Basic user calls admin endpoint (BFLA) | High | Permission claim at gateway (RouteClaimsRequirement) + [HasPermission] in service | Done |
 | E2 | EoP | Clients | Stolen access token reused | Medium | 15-min lifetime; refresh token rotated on each use | Done |
@@ -62,15 +62,13 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 
 | Status | Count |
 |---|---|
-| Done | 9 |
-| Partial | 4 |
-| Planned | 10 |
-| Open | 1 |
+| Done | 10 |
+| Partial | 7 |
+| Planned | 7 |
 | N/A | 1 |
 
 ## Top open risks
 
-- S4: no account lockout (gateway rate limit only slows guessing).
-- S5, T3: unauthenticated, unsigned queue events (needs owner: messaging).
+- S5, T3: queue events not signed; any broker user can forge stock changes.
 - D1: unbounded Quantity in events.
-- I4: secrets committed to git.
+- I5: refresh tokens stored in plaintext.

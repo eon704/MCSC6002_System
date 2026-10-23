@@ -19,10 +19,10 @@
   <text x="432" y="95" font-size="11" font-weight="bold" fill="#2e7d32">TB2  mTLS: project CA, CN=api-gateway</text>
   <!-- TB4: data stores (weak) -->
   <rect x="700" y="75" width="282" height="240" rx="10" fill="#fff6f0" stroke="#c62828" stroke-width="2.5" stroke-dasharray="9,6"/>
-  <text x="712" y="95" font-size="11" font-weight="bold" fill="#c62828">TB4  not encrypted (Encrypt=False, Redis)</text>
+  <text x="712" y="95" font-size="11" font-weight="bold" fill="#c62828">TB4  SQL TLS (cert not verified), Redis pwd</text>
   <!-- TB3: messaging (weak) -->
   <rect x="700" y="355" width="282" height="160" rx="10" fill="#fff6f0" stroke="#c62828" stroke-width="2.5" stroke-dasharray="9,6"/>
-  <text x="712" y="375" font-size="11" font-weight="bold" fill="#c62828">TB3  plain AMQP, guest/guest, unsigned</text>
+  <text x="712" y="375" font-size="11" font-weight="bold" fill="#c62828">TB3  plain AMQP, own user, unsigned</text>
 
   <!-- Nodes -->
   <rect x="30" y="290" width="125" height="60" rx="6" fill="#f4f4f4" stroke="#555"/>
@@ -54,7 +54,7 @@
 
   <rect x="725" y="235" width="232" height="55" rx="6" fill="#fff" stroke="#8a6d3b"/>
   <text x="841" y="258" font-size="14" font-weight="bold" text-anchor="middle">Redis</text>
-  <text x="841" y="276" font-size="11" fill="#555" text-anchor="middle">product cache, no auth</text>
+  <text x="841" y="276" font-size="11" fill="#555" text-anchor="middle">product cache, password auth</text>
 
   <rect x="725" y="400" width="232" height="60" rx="6" fill="#fff" stroke="#8a6d3b"/>
   <text x="841" y="425" font-size="14" font-weight="bold" text-anchor="middle">RabbitMQ</text>
@@ -87,7 +87,7 @@
   <!-- Boundary key -->
   <g font-size="11" fill="#222">
     <text x="30" y="612"><tspan font-weight="bold" fill="#2e7d32">1 TB1</tspan> Internet -> Gateway: HTTPS, JWT RS256 (15 min), permission claim per route.   <tspan font-weight="bold" fill="#2e7d32">2 TB2</tspan> Gateway -> services: mTLS + JWT re-check.</text>
-    <text x="30" y="630"><tspan font-weight="bold" fill="#c62828">3 TB3</tspan> Services -> RabbitMQ: no TLS, default creds, no event signing (open).   <tspan font-weight="bold" fill="#c62828">4 TB4</tspan> Services -> SQL/Redis: not encrypted (planned).</text>
+    <text x="30" y="630"><tspan font-weight="bold" fill="#c62828">3 TB3</tspan> Services -> RabbitMQ: no TLS, no event signing yet.   <tspan font-weight="bold" fill="#c62828">4 TB4</tspan> Services -> SQL/Redis: SQL TLS without cert check, Redis unencrypted.</text>
     <text x="30" y="648"><tspan font-weight="bold" fill="#2e7d32">5 TB5</tspan> Inventory -> Gateway (product lookup): HTTPS + forwarded user JWT.   Green = enforced, red = weak.</text>
   </g>
 </svg>
