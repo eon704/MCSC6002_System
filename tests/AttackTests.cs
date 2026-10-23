@@ -155,6 +155,12 @@ for (var i = 0; i < 5; i++) await Send(asGateway, HttpMethod.Post, Identity + "/
 var lockedLogin = await Login(asGateway, Identity + "/api/token/login", testUser, testPassword);
 Check("A13", "S4", "5 wrong passwords, then the correct one", "correct password rejected", $"before: {(firstLogin is null ? "rejected" : "ok")}, after: {(lockedLogin is null ? "rejected" : "ok")}", firstLogin is not null && lockedLogin is null);
 
+// Direct to Identity: the gateway's /auth/* limit is used up by A11.
+var session = await Login(asGateway, Identity + "/api/token/login", "basic@cloudbase.com", env["SEED_BASIC_PASSWORD"]);
+var revoke = await Send(asGateway, HttpMethod.Post, Identity + "/api/token/revoke", session!["token"]!.ToString());
+r = await Send(asGateway, HttpMethod.Post, Identity + "/api/token/refresh-token", body: new { token = session["token"]!.ToString(), refreshToken = session["refreshToken"]!.ToString() });
+Check("A14", "E3", "Refresh after logout (revoke)", "200 then 400", $"{revoke.Status} then {Show(r)}", revoke.Status == 200 && r.Status == 400);
+
 // ---------- Service-to-service transport ----------
 r = await Send(client, HttpMethod.Post, Identity + "/api/token/login", body: new { userName = "admin@cloudbase.com", password = "x" });
 Check("N1", "S3", "Direct call to a service, no client cert", "TLS handshake rejected", Show(r), r.Status == 0);
@@ -198,6 +204,14 @@ r = await Send(client, HttpMethod.Post, ProductsCreate, adminToken, ProductBody(
 all = await Send(client, HttpMethod.Get, ProductsAll, adminToken);
 var contentType = all.Response?.Content.Headers.ContentType?.MediaType;
 Check("V7", "T4", "XSS payload as product name", "stored as data, served as JSON", $"create {r.Status}, served as {contentType}", contentType == "application/json");
+
+r = await Send(client, HttpMethod.Put, Gateway + "/inventory-service/items/change-item-status", adminToken, new { id = 1, status = "<script>" });
+Check("V8", "T4", "Unknown inventory status", "rejected", Show(r), r.Status is 400 or 404 && r.Body.Contains("Status must be"));
+
+var underLimit = await Send(client, HttpMethod.Post, ProductsCreate, adminToken, ProductBody("Big", 1, new string('A', 1024 * 1024)));
+r = await Send(client, HttpMethod.Post, ProductsCreate, adminToken, ProductBody("Big", 1, new string('A', 3 * 1024 * 1024)));
+// Kestrel answers 413 and closes the connection, so the client usually sees a reset mid-upload.
+Check("V9", "D3", "1 MB vs 3 MB request body (2 MB limit)", "400 (validator), then 413/reset", $"{underLimit.Status}, then {Show(r)}", underLimit.Status == 400 && r.Status is 413 or 0);
 
 // ---------- Messaging (attacker with RabbitMQ credentials publishes directly) ----------
 var signingKey = Convert.FromBase64String(env["MESSAGE_SIGNING_KEY"]);

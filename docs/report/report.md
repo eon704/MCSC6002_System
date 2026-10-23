@@ -38,7 +38,7 @@ The design follows three principles. Defense in depth: the gateway checks every 
 
 ### 4.1 Authentication and access control
 
-Access tokens are JWTs signed with RS256 and valid for 15 minutes. The Identity service signs them with an RSA private key; the gateway and the other services receive only the public key, so a compromised service cannot issue tokens. Every validator accepts only RS256, which blocks algorithm confusion attacks such as `alg=none` or HS256 (Sheffer et al., 2020). Refresh tokens are 32 random bytes, valid for one day and replaced on every use, so a used refresh token is rejected.
+Access tokens are JWTs signed with RS256 and valid for 15 minutes. The Identity service signs them with an RSA private key; the gateway and the other services receive only the public key, so a compromised service cannot issue tokens. Every validator accepts only RS256, which blocks algorithm confusion attacks such as `alg=none` or HS256 (Sheffer et al., 2020). Refresh tokens are 32 random bytes, valid for one day and replaced on every use, so a used refresh token is rejected. On logout a user can revoke their refresh token.
 
 Authorization is permission based. The gateway checks the permission claim required by each route before forwarding the request, and the service checks the same permission again with its own `[HasPermission]` attribute. Passwords must have at least 12 characters with 6 different ones, following the length-over-composition advice in NIST SP 800-63B (Grassi et al., 2017). After 5 failed logins an account is locked for 15 minutes, and the gateway allows at most 5 login or refresh requests per minute per IP address. Wrong passwords, unknown users and locked accounts all get the same message, so a response does not reveal whether an account exists or is locked.
 
@@ -48,11 +48,11 @@ Clients reach the gateway over HTTPS, with HSTS outside development. Between the
 
 ### 4.3 Hashing and integrity
 
-Passwords are stored as salted PBKDF2 hashes by ASP.NET Core Identity. Queue events carry an HMAC-SHA256 signature (Krawczyk et al., 1997) over the event type, a timestamp and the message body. The Inventory service verifies the signature in a filter that runs before every consumer and rejects events that are unsigned, altered or older than five minutes. Rejected events go to an error queue as evidence instead of being retried.
+Passwords are stored as salted PBKDF2 hashes by ASP.NET Core Identity. Refresh tokens are stored only as SHA-256 hashes, so a copy of the database holds no usable session. Queue events carry an HMAC-SHA256 signature (Krawczyk et al., 1997) over the event type, a timestamp and the message body. The Inventory service verifies the signature in a filter that runs before every consumer and rejects events that are unsigned, altered or older than five minutes. Rejected events go to an error queue as evidence instead of being retried.
 
 ### 4.4 Input validation
 
-Request bodies in the Identity and Product services are validated with FluentValidation for type, length and range; the Inventory service has no validators yet. Entity Framework Core sends all queries with parameters, which prevents SQL injection. Product quantity is limited to 1 to 1000, because the Inventory service creates one record per unit. The consumer checks the same limit again, in case an event bypasses the Product service.
+Request bodies in all three services are validated with FluentValidation for type, length and range, and the Inventory service accepts only known stock statuses. The gateway rejects bodies larger than 2 MB. Entity Framework Core sends all queries with parameters, which prevents SQL injection. Product quantity is limited to 1 to 1000, because the Inventory service creates one record per unit. The consumer checks the same limit again, in case an event bypasses the Product service.
 
 ### 4.5 Secrets and error handling
 
@@ -60,7 +60,7 @@ No password or key is committed. Infrastructure and seed passwords live in a git
 
 ## 5. Threat Modelling and Mitigation
 
-We applied STRIDE (Shostack, 2014) to each component and trust boundary and rated each threat by likelihood and impact (Low, Medium or High). The model lists 26 threats; Appendix A has the full table. At the end of the project, 14 are mitigated, 6 partly mitigated, 5 planned and 1 not applicable.
+We applied STRIDE (Shostack, 2014) to each component and trust boundary and rated each threat by likelihood and impact (Low, Medium or High). The model lists 26 threats; Appendix A has the full table. At the end of the project, 17 are mitigated, 5 partly mitigated, 3 planned and 1 not applicable.
 
 The highest risks at the start were forged tokens (a signing secret shared by four services and committed to git), direct calls to services that bypass the gateway, password guessing, forged or altered queue events and an unbounded quantity that let one event create any number of records. All of these are now mitigated and tested.
 
@@ -68,7 +68,7 @@ Broken object level authorization, the first item in the OWASP API Security Top 
 
 The main remaining risks are:
 
-- refresh tokens are stored in plain text in the database;
+- a leaked refresh token can be used once, because reuse is not detected;
 - RabbitMQ traffic is not encrypted, and a signed event can be replayed within the five-minute window;
 - the HMAC key is shared, so the Inventory service could also forge events;
 - there is no audit log of who changed products or stock;
@@ -76,9 +76,9 @@ The main remaining risks are:
 
 ## 6. Testing and Validation
 
-We tested in four ways. A scripted suite of 33 attack cases (Appendix B) runs against the live system, and each case maps to a threat ID. Semgrep scanned the source of all seven repositories, Gitleaks scanned their git history and OWASP ZAP ran an authenticated active scan of all 19 gateway routes.
+We tested in four ways. A scripted suite of 36 attack cases (Appendix B) runs against the live system, and each case maps to a threat ID. Semgrep scanned the source of all seven repositories, Gitleaks scanned their git history and OWASP ZAP ran an authenticated active scan of all 19 gateway routes.
 
-All 33 attack cases pass. They cover forged, expired and wrongly signed tokens, privilege escalation, refresh token reuse, rate limiting and lockout, direct calls to services without the gateway certificate, SQL injection and oversized or malformed input, and events published straight to RabbitMQ by an attacker with broker credentials.
+All 36 attack cases pass. They cover forged, expired and wrongly signed tokens, privilege escalation, refresh token reuse and use after logout, rate limiting and lockout, direct calls to services without the gateway certificate, SQL injection and oversized or malformed input, and events published straight to RabbitMQ by an attacker with broker credentials.
 
 Semgrep reported five findings: four GitHub Actions referenced by a tag instead of a commit, which we accept as a low supply chain risk, and the deliberate `ValidateLifetime = false` in the refresh flow. Gitleaks found the old HS256 secret in the history of four repositories; it is no longer used and test A4 shows it is rejected. ZAP found no high risk issues. Its one medium alert is a false positive caused by our own SQL injection test data, and the missing HSTS header is expected in development mode.
 
@@ -92,11 +92,11 @@ Several defects appeared only when we attacked the running system: the middlewar
 
 ## 8. Conclusion
 
-The prototype delivers the security controls promised in the proposal: RS256 tokens with short lifetimes and refresh rotation, permission checks at the gateway and in every service, mutual TLS between them, signed queue events, input validation and protection against password guessing. The threat model and the test results show how each control maps to a threat and that it works. The remaining work is encryption of RabbitMQ traffic, hashed refresh tokens with a revoke endpoint, an audit log and container images for the services themselves.
+The prototype delivers the security controls promised in the proposal: RS256 tokens with short lifetimes and hashed, rotating refresh tokens, permission checks at the gateway and in every service, mutual TLS between them, signed queue events, input validation and protection against password guessing. The threat model and the test results show how each control maps to a threat and that it works. The remaining work is encryption of RabbitMQ traffic, refresh token reuse detection, an audit log and container images for the services themselves.
 
 ## Team Contributions
 
-Mario Silveira built the Identity, Product and Inventory services, the shared libraries and their build pipelines. Arman Akhmetov built the token and gateway security (RS256 signing and validation, route permissions, mutual TLS, rate limiting, lockout and password policy, error handling), the message signing, the local infrastructure, the threat model and diagrams, and the testing, and wrote this report.
+Mario Silveira built the Identity, Product and Inventory services, the shared libraries and their build pipelines. Arman Akhmetov built the token and gateway security (RS256 signing and validation, route permissions, mutual TLS, rate limiting, lockout and password policy, refresh token hashing and revocation, error handling), the message signing, the local infrastructure, the threat model and diagrams, and the testing, and wrote this report.
 
 ## References
 
