@@ -1,14 +1,14 @@
 # Demo Run Sheet
 
-About 3 minutes. Matches slide 11.
+About 3 minutes. The talk plays a recording of this run on slide 11; slides 12 and 13 show its output in case the video fails.
 
-## Before the talk
+## Before running or recording
 
 1. `bash scripts/run.sh` (from MCSC6002_System). Wait for the four "up" lines.
 2. Open a Git Bash terminal in MCSC6002_System with a large font. Run the demo once as a rehearsal, then leave everything running.
 3. Optional: open the RabbitMQ UI (http://127.0.0.1:15672) on the `ProductCreatedEventQueue_error` queue.
 
-## During the demo
+## Steps
 
 Run `bash scripts/demo.sh` and press Enter for each step.
 
@@ -27,4 +27,19 @@ Run `bash scripts/demo.sh` and press Enter for each step.
 - Login returns 429: the 1-minute login limit was hit. Wait a minute.
 - Login fails for a seeded user: the account may be locked for 15 minutes after failed attempts. Use the other seeded user, or wait.
 - "Service Unavailable" from the gateway: a service stopped. Check `logs/`, then `bash scripts/run.sh` again.
-- Live demo not possible: show the testing table in the report (Appendix B) instead.
+- Video does not play during the talk: move on to slides 12 and 13.
+
+## Recording the video for slide 11
+
+1. Run `bash scripts/run.sh`, then wait a minute after any earlier login so steps 1 to 3 are not rate-limited.
+2. Git Bash full screen at 1920x1080, font size 16 or larger, notifications off.
+3. Start recording: Win+Alt+R (Xbox Game Bar), or OBS.
+4. Type `bash scripts/demo.sh`. Press Enter for each step and pause about 3 seconds on each result so it can be read:
+   - Steps 1 to 3 (normal use): RS256 header, HTTP 403, 3 stock items.
+   - Steps 4 to 6 (attacks): HTTP 401, TLS handshake rejected, 0 stock items and the error queue going up by 1.
+   - Step 7: wait for "37/37 passed." The pause before it is up to a minute; trim it while editing if it drags.
+5. Stop recording. Trim the start and end (Clipchamp or Photos); keep it under 3 minutes, MP4, 1080p.
+6. In PowerPoint (the .pptx downloaded from Google Slides): slide 11, Insert, Video, This Device. Playback: Start On Click.
+7. Open the .pptx on another computer once: check that the video plays and the fonts look right.
+
+Record without narration; you and Mario talk over it during the talk (cues are in the slide 11 notes).
