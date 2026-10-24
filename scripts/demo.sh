@@ -9,7 +9,8 @@ BODY=$(mktemp); trap 'rm -f "$BODY"' EXIT
 B=$'\e[1m'; DIM=$'\e[2m'; CY=$'\e[36m'; GR=$'\e[32m'; RD=$'\e[31m'; YE=$'\e[33m'; N=$'\e[0m'
 
 json() { python -c "import sys,json; d=json.load(sys.stdin); print($1)"; }
-step() { echo; echo "${B}━━ $1 ━━${N}"; read -rs; }
+# step TITLE: prints the step title, waits for Enter, then clears the prompt so recordings stay clean.
+step() { echo; echo "${B}━━ $1 ━━${N}"; printf '%s' "${YE}▶ Press Enter to run this step${N}"; read -rs; printf '\r\e[K'; }
 show() { echo "${CY}\$ $1${N}"; }
 why() { echo "${YE}Why:${N} $1"; }
 mask() { echo "${1:0:20}…"; }
