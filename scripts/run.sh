@@ -13,7 +13,15 @@ fi
 
 # Compose starts the services once SQL Server and RabbitMQ are healthy.
 docker compose build --quiet
-docker compose up -d
+if ! docker compose up -d; then
+  if docker compose logs sqlserver 2> /dev/null | grep -q "Password did not match"; then
+    echo "SQL Server rejects the sa password: its data volume was created with an older .env."
+    echo "Reset it (deletes all data): docker compose down -v, then bash scripts/run.sh"
+  else
+    echo "start failed: see docker compose ps and docker compose logs <service>"
+  fi
+  exit 1
+fi
 
 for service in identity:"Now listening" product:"Bus started" inventory:"Bus started" gateway:"Now listening"; do
   name="${service%%:*}"

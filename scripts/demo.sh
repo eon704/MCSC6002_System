@@ -36,7 +36,16 @@ evidence() {
   echo "${DIM}$1 log:${N} ${hit:-(no log line)}"
 }
 
-login() { curl -sk -X POST -H "Content-Type: application/json" -d "{\"userName\":\"$1\",\"password\":\"$2\"}" $G/auth/login | json "d['data']['token']"; }
+login() { curl -sk -X POST -H "Content-Type: application/json" -d "{\"userName\":\"$1\",\"password\":\"$2\"}" $G/auth/login | json "(d.get('data') or {}).get('token', '')" 2> /dev/null; }
+# need_token TOKEN USER: stop with a fix instead of tracebacks when a login fails.
+need_token() {
+  [ -n "$1" ] && return
+  echo "${RD}Login failed for $2.${N} Wait a minute (5 logins per minute per IP) and run the demo again."
+  echo "On a fresh setup over an old data volume, reset it (deletes all data): docker compose down -v, then bash scripts/run.sh"
+  exit 1
+}
+
+curl -sk -o /dev/null -m 5 "$G/" || { echo "${RD}Gateway not reachable at $G.${N} Start the system first: bash scripts/run.sh"; exit 1; }
 claims() { echo "$1" | python -c "
 import sys,json,base64
 h,p,_=sys.stdin.read().strip().split('.'); dec=lambda s: json.loads(base64.urlsafe_b64decode(s+'=='))
@@ -44,7 +53,7 @@ $2"; }
 
 step "Step 1 · Admin logs in through the gateway"
 show "curl -X POST $G/auth/login -d '{\"userName\":\"admin@cloudbase.com\",\"password\":\"••••\"}'"
-ADMIN=$(login admin@cloudbase.com "$SEED_ADMIN_PASSWORD")
+ADMIN=$(login admin@cloudbase.com "$SEED_ADMIN_PASSWORD"); need_token "$ADMIN" admin@cloudbase.com
 echo "${GR}← HTTP 200${N}  ${DIM}{\"token\":\"$(mask "$ADMIN")\",\"refreshToken\":\"••••\", ...}${N}"
 claims "$ADMIN" "
 import time; pl=dec(p); r=pl['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']
@@ -54,7 +63,7 @@ why "Only Identity holds the RSA private key; the gateway and services verify th
 
 step "Step 2 · Basic user tries to create a product"
 show "curl -X POST $G/auth/login -d '{\"userName\":\"basic@cloudbase.com\",\"password\":\"••••\"}'"
-BASIC=$(login basic@cloudbase.com "$SEED_BASIC_PASSWORD")
+BASIC=$(login basic@cloudbase.com "$SEED_BASIC_PASSWORD"); need_token "$BASIC" basic@cloudbase.com
 LOGIN_AT=$SECONDS
 echo "${GR}← HTTP 200${N}  ${DIM}{\"token\":\"$(mask "$BASIC")\", ...}${N}"
 claims "$BASIC" "print('basic user may:', ', '.join(x.removeprefix('Permission.') for x in dec(p)['permission']))"
