@@ -98,6 +98,8 @@ await Send(client, HttpMethod.Post, Gateway + "/product-service/brands/create", 
 var brands = JsonNode.Parse((await Send(client, HttpMethod.Get, Gateway + "/product-service/brands/all", adminToken)).Body)!["data"]!.AsArray();
 var brandId = brands.Max(b => (int)b!["id"]!);
 object ProductBody(string name, object quantity, string description = "") => new { brandId, name, description, quantity, reOrderThreshold = 0 };
+// Product answers 400 "Products not found" to an empty list, so a fresh database needs one product before A8.
+await Send(client, HttpMethod.Post, ProductsCreate, adminToken, ProductBody("Setup", 1));
 
 // ---------- Authentication and access control ----------
 var r = await Send(client, HttpMethod.Get, ProductsAll);
