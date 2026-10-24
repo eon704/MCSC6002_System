@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Live demo, one step per Enter. Each step prints the request, the response, why it happened and,
 # where a service logs it, the log line as evidence. Passwords and tokens are masked on screen.
-# Prerequisite: bash scripts/run.sh. Usage (from MCSC6002_System): bash scripts/demo.sh
+# Prerequisite: bash scripts/run.sh. Usage (from any folder): bash scripts/demo.sh
 set -u
+cd "$(dirname "$0")/.."
+[ -f .env ] || { echo "no .env in $(pwd): run bash scripts/setup.sh, then bash scripts/run.sh"; exit 1; }
 source <(tr -d '\r' < .env)
 G=https://localhost:7000
 BODY=$(mktemp); trap 'rm -f "$BODY"' EXIT
