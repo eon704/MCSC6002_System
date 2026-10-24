@@ -1,7 +1,14 @@
-# Local infrastructure only. The services run on the host with `dotnet run`.
-# Credentials come from .env (never committed); see .env.example.
-# Ports bind to 127.0.0.1 so nothing is reachable from the network.
+# The whole system: infrastructure and the four services, built from the sibling repositories.
+# Credentials come from .env (never committed); see .env.example. Keys and certificates come from ../keys
+# (scripts/setup.sh); each service mounts only the files it needs, read-only.
+# Ports bind to 127.0.0.1 so nothing is reachable from the network. The service ports are published
+# only for the attack suite and the demo, which show that direct calls fail mutual TLS.
 name: mcsc6002
+
+x-service: &service
+  restart: unless-stopped
+  environment: &service-env
+    ASPNETCORE_ENVIRONMENT: Docker
 
 services:
   sqlserver:
@@ -13,6 +20,11 @@ services:
       - "127.0.0.1:1433:1433"
     volumes:
       - sqldata:/var/opt/mssql
+    healthcheck:
+      # Healthy only when every database has finished recovery; services migrate on start.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -b -o /dev/null -Q \"IF EXISTS (SELECT 1 FROM sys.databases WHERE state_desc <> 'ONLINE') RAISERROR('recovering', 16, 1)\""]
+      interval: 5s
+      retries: 30
 
   rabbitmq:
     image: rabbitmq:4-management
@@ -28,12 +40,95 @@ services:
       - ../keys/tls/ca.crt:/etc/rabbitmq/tls/ca.crt:ro
       - ../keys/tls/rabbitmq.crt:/etc/rabbitmq/tls/rabbitmq.crt:ro
       - ../keys/tls/rabbitmq.key:/etc/rabbitmq/tls/rabbitmq.key:ro
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      retries: 30
 
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
     ports:
       - "127.0.0.1:6379:6379"
+
+  identity:
+    <<: *service
+    build: ../MCSC6002_IdentityService
+    environment:
+      <<: *service-env
+      ASPNETCORE_URLS: https://+:7284
+      SeedDatabase: "true"
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=MCSC6002_IdentityDB;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True;
+      SeedCredentials__AdminPassword: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD in .env}
+      SeedCredentials__BasicPassword: ${SEED_BASIC_PASSWORD:?set SEED_BASIC_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:7284:7284"
+    volumes:
+      - ../keys/jwt-private.pem:/keys/jwt-private.pem:ro
+      - ../keys/tls/identity.pfx:/keys/identity.pfx:ro
+      - ../keys/tls/ca.crt:/keys/ca.crt:ro
+    depends_on:
+      sqlserver: { condition: service_healthy }
+
+  product:
+    <<: *service
+    build: ../MCSC6002_ProductService
+    environment:
+      <<: *service-env
+      ASPNETCORE_URLS: https://+:7280
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=MCSC6002_ProductDB;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True;
+      CacheSettings__DestinationUrl: redis:6379,password=${REDIS_PASSWORD}
+      RabbitMqSettings__UserName: ${RABBITMQ_USER}
+      RabbitMqSettings__Password: ${RABBITMQ_PASSWORD}
+      RabbitMqSettings__SigningKey: ${MESSAGE_SIGNING_KEY:?set MESSAGE_SIGNING_KEY in .env}
+    ports:
+      - "127.0.0.1:7280:7280"
+    volumes:
+      - ../keys/jwt-public.pem:/keys/jwt-public.pem:ro
+      - ../keys/tls/product.pfx:/keys/product.pfx:ro
+      - ../keys/tls/ca.crt:/keys/ca.crt:ro
+    depends_on:
+      sqlserver: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  inventory:
+    <<: *service
+    build: ../MCSC6002_InventoryService
+    environment:
+      <<: *service-env
+      ASPNETCORE_URLS: https://+:7148
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=MCSC6002_InventoryDB;User Id=sa;Password=${SQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True;
+      RabbitMqSettings__UserName: ${RABBITMQ_USER}
+      RabbitMqSettings__Password: ${RABBITMQ_PASSWORD}
+      RabbitMqSettings__SigningKey: ${MESSAGE_SIGNING_KEY}
+    ports:
+      - "127.0.0.1:7148:7148"
+    volumes:
+      - ../keys/jwt-public.pem:/keys/jwt-public.pem:ro
+      - ../keys/tls/inventory.pfx:/keys/inventory.pfx:ro
+      - ../keys/tls/ca.crt:/keys/ca.crt:ro
+    depends_on:
+      sqlserver: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  gateway:
+    <<: *service
+    build: ../MCSC6002_ApiGateway
+    environment:
+      <<: *service-env
+      ASPNETCORE_URLS: https://+:7000
+    ports:
+      - "127.0.0.1:7000:7000"
+    volumes:
+      - ../keys/jwt-public.pem:/keys/jwt-public.pem:ro
+      - ../keys/tls/gateway.pfx:/keys/gateway.pfx:ro
+      - ../keys/tls/gateway-client.pfx:/keys/gateway-client.pfx:ro
+      - ../keys/tls/ca.crt:/keys/ca.crt:ro
+    depends_on:
+      - identity
+      - product
+      - inventory
 
 volumes:
   sqldata:
