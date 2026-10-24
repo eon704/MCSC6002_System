@@ -1,0 +1,1020 @@
+{
+  "info": {
+    "name": "MCSC6002 Attack Demo",
+    "description": "Attack demo for the Secure Microservices Inventory System. Same steps as scripts/demo.sh and a subset of tests/AttackTests.cs.\n\nBefore running:\n1. Start the stack: bash scripts/run.sh (from MCSC6002_System).\n2. Postman Settings > Certificates > CA certificates: add keys/tls/ca.crt (trusts our CA in Postman only). Or turn off SSL certificate verification.\n3. Collection > Variables: fill adminPassword, basicPassword (SEED_ADMIN_PASSWORD, SEED_BASIC_PASSWORD) and rabbitUser, rabbitPassword (RABBITMQ_USER, RABBITMQ_PASSWORD) from .env. Put them in Current value only, never in Initial value, so they are not exported.\n4. Run the folders in order, or use Run collection. Wait a minute between full runs: /auth allows 5 calls per minute per IP.\n\nEvery request has tests; see the Test Results tab. Folder 3 is expected to fail with \"Could not get response\".",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0 Setup",
+      "description": "Logs in both seeded users and picks a brand. Run first.",
+      "item": [
+        {
+          "name": "Admin logs in",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const CryptoJS = require('crypto-js');",
+                  "const dec = s => CryptoJS.enc.Base64.parse(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)).toString(CryptoJS.enc.Utf8);",
+                  "const url = b => b.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const enc = s => url(CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(s)));",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().data.token;",
+                  "pm.collectionVariables.set('adminToken', token);",
+                  "const [h, p] = token.split('.');",
+                  "const header = JSON.parse(dec(h)), payload = JSON.parse(dec(p));",
+                  "console.log('header', header, 'payload', payload);",
+                  "pm.test('Signed with RS256', () => pm.expect(header.alg).to.eql('RS256'));",
+                  "pm.test('Expires in 15 minutes', () => pm.expect(Math.round((payload.exp - Date.now() / 1000) / 60)).to.be.within(14, 15));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Admin gets an RS256 access token (15 min) and a refresh token.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"userName\": \"{{adminUser}}\", \"password\": \"{{adminPassword}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Basic user logs in",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const CryptoJS = require('crypto-js');",
+                  "const dec = s => CryptoJS.enc.Base64.parse(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)).toString(CryptoJS.enc.Utf8);",
+                  "const url = b => b.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const enc = s => url(CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(s)));",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json().data;",
+                  "pm.collectionVariables.set('basicToken', data.token);",
+                  "pm.collectionVariables.set('basicRefreshToken', data.refreshToken);",
+                  "console.log('basic user permissions', JSON.parse(dec(data.token.split('.')[1])).permission);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Basic user: read permissions only.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"userName\": \"{{basicUser}}\", \"password\": \"{{basicPassword}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Pick a brand",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('brandId', pm.response.json().data[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/brands/all",
+            "description": "First brand id, used to create products.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1 Normal use",
+      "description": "The system works for allowed actions.",
+      "item": [
+        {
+          "name": "Basic user reads products (A8)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/all",
+            "description": "Read is allowed for the basic user.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{basicToken}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin creates a product, quantity 3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('productId', pm.response.json().data);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/create",
+            "description": "Product saves it and publishes a signed ProductCreatedEvent to RabbitMQ.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"brandId\": {{brandId}}, \"name\": \"Postman widget\", \"description\": \"attack demo\", \"quantity\": 3, \"reOrderThreshold\": 1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Inventory created 3 stock items",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 2000); // Let Inventory consume the event."
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('3 stock items', () => pm.expect(pm.response.json().data).to.have.lengthOf(3));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/inventory-service/items/get-by-product-id/{{productId}}",
+            "description": "Inventory verified the event signature and created one item per unit.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 Token attacks",
+      "description": "Each request attacks the token or the permission check. All must fail.",
+      "item": [
+        {
+          "name": "No token (A1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/all",
+            "description": "Protected route without a token.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Basic user creates a product (A7)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/create",
+            "description": "Route needs Permission.Product.Products.Create; the gateway refuses before Product is called.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{basicToken}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"brandId\": {{brandId}}, \"name\": \"Postman widget\", \"description\": \"attack demo\", \"quantity\": 3, \"reOrderThreshold\": 1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Edited token: add Create permission (A2)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const CryptoJS = require('crypto-js');",
+                  "const dec = s => CryptoJS.enc.Base64.parse(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)).toString(CryptoJS.enc.Utf8);",
+                  "const url = b => b.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const enc = s => url(CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(s)));",
+                  "const [h, p, s] = pm.collectionVariables.get('basicToken').split('.');",
+                  "pm.variables.set('attackToken', [h, enc(dec(p).replace('Products.Read', 'Products.Create')), s].join('.'));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/create",
+            "description": "Payload edited from Products.Read to Products.Create; signature kept. RS256 covers header and payload, so the signature no longer matches.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attackToken}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"brandId\": {{brandId}}, \"name\": \"Postman widget\", \"description\": \"attack demo\", \"quantity\": 3, \"reOrderThreshold\": 1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "alg=none token (A3)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const CryptoJS = require('crypto-js');",
+                  "const dec = s => CryptoJS.enc.Base64.parse(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)).toString(CryptoJS.enc.Utf8);",
+                  "const url = b => b.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const enc = s => url(CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(s)));",
+                  "const p = pm.collectionVariables.get('basicToken').split('.')[1];",
+                  "pm.variables.set('attackToken', enc('{\"alg\":\"none\",\"typ\":\"JWT\"}') + '.' + p + '.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/all",
+            "description": "Header says no signature at all. Validators accept RS256 only.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attackToken}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "HS256 token signed with the old leaked secret (A4)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const CryptoJS = require('crypto-js');",
+                  "const dec = s => CryptoJS.enc.Base64.parse(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)).toString(CryptoJS.enc.Utf8);",
+                  "const url = b => b.replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const enc = s => url(CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(s)));",
+                  "const p = pm.collectionVariables.get('basicToken').split('.')[1];",
+                  "const unsigned = enc('{\"alg\":\"HS256\",\"typ\":\"JWT\"}') + '.' + p;",
+                  "const sig = url(CryptoJS.enc.Base64.stringify(CryptoJS.HmacSHA256(unsigned, 'ao787VuHniutbig8ob5cf000pju787jlpzDD0')));",
+                  "pm.variables.set('attackToken', unsigned + '.' + sig);",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/all",
+            "description": "The retired HS256 secret is still in git history. A valid HS256 token made with it is rejected: only RS256 is accepted.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{attackToken}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 Bypass the gateway",
+      "description": "Call a service directly on its own port.",
+      "item": [
+        {
+          "name": "Direct call to Product, no client certificate (N1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const code = pm.response && pm.response.code;",
+                  "pm.test('No HTTP response: TLS handshake rejected', () => pm.expect(code, `got HTTP ${code}`).to.be.undefined);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{productDirectUrl}}/api/products/all",
+            "description": "Expected: \"Could not get response\" (TLS handshake fails). Product accepts only the client certificate our CA issued to the gateway (mutual TLS). No test runs because there is no response.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 Forged event",
+      "description": "Attacker with RabbitMQ credentials publishes an unsigned event straight to the broker.",
+      "item": [
+        {
+          "name": "Error queue count before",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('errorsBefore', pm.response.json().messages || 0);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{rabbitUrl}}/api/queues/%2F/ProductCreatedEventQueue_error",
+            "description": "Messages in the error queue now.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{rabbitUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{rabbitPassword}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Publish unsigned event, quantity 3 (M1)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const id = 900000 + Math.floor(Math.random() * 99999);",
+                  "pm.collectionVariables.set('fakeId', id);",
+                  "const envelope = {",
+                  "    messageId: pm.variables.replaceIn('{{$guid}}'),",
+                  "    messageType: ['urn:message:ResponseLibrary.Models.Requests.Product.Events:ProductCreatedEvent'],",
+                  "    message: { Id: id, Name: 'forged', Quantity: 3, ReOrderThreshold: 0 },",
+                  "    headers: {} // No X-Signature / X-Signed-At.",
+                  "};",
+                  "pm.variables.set('eventBody', JSON.stringify({",
+                  "    properties: { content_type: 'application/vnd.masstransit+json', headers: {} },",
+                  "    routing_key: '', payload: JSON.stringify(envelope), payload_encoding: 'string'",
+                  "}));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Broker routed it', () => pm.expect(pm.response.json().routed).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{rabbitUrl}}/api/exchanges/%2F/ResponseLibrary.Models.Requests.Product.Events:ProductCreatedEvent/publish",
+            "description": "RabbitMQ accepts and routes it; the broker does not check signatures. Body is built in the pre-request script.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{rabbitUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{rabbitPassword}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{eventBody}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "No stock items for the forged product",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 2000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found (no items)', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/inventory-service/items/get-by-product-id/{{fakeId}}",
+            "description": "Inventory rejected the event before any consumer ran. Its log: \"Rejected ProductCreatedEvent ...: missing signature\".",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Error queue count after",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 6000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const before = +pm.collectionVariables.get('errorsBefore'), after = pm.response.json().messages || 0;",
+                  "console.log(`error queue: ${before} -> ${after}`);",
+                  "pm.test(`Error queue grew (${before} -> ${after})`, () => pm.expect(after).to.be.above(before));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{rabbitUrl}}/api/queues/%2F/ProductCreatedEventQueue_error",
+            "description": "The rejected event moved to the error queue. Management stats lag about 5 seconds.",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{rabbitUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{rabbitPassword}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 Input validation",
+      "description": "Bad input gets 400, never a 500 or a stack trace.",
+      "item": [
+        {
+          "name": "Quantity 5000 (V5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/create",
+            "description": "Quantity must be 1 to 1000; one stock row per unit.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"brandId\": {{brandId}}, \"name\": \"Postman widget\", \"description\": \"attack demo\", \"quantity\": 5000, \"reOrderThreshold\": 1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "SQL injection in route id (V3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 or 404, no data', () => pm.expect(pm.response.code).to.be.oneOf([400, 404]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/1%20OR%201=1",
+            "description": "Route id must be an integer; EF Core parameterizes queries.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unknown inventory status (V8)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Rejected', () => pm.expect(pm.response.code).to.be.oneOf([400, 404]));",
+                  "pm.test('Says which statuses are allowed', () => pm.expect(pm.response.text()).to.include('Status must be'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/inventory-service/items/change-item-status",
+            "description": "Only Available, Sold or Removed are accepted.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"id\": 1, \"status\": \"<script>\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Malformed JSON (I2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('No stack trace', () => pm.expect(pm.response.text()).to.not.include('   at '));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/create",
+            "description": "Broken body: generic 400, no stack trace.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ not json",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6 Information disclosure",
+      "description": "Response headers reveal nothing and prevent caching.",
+      "item": [
+        {
+          "name": "Security headers (I1, I3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('No Server header', () => pm.response.to.not.have.header('Server'));",
+                  "pm.test('No X-Powered-By', () => pm.response.to.not.have.header('X-Powered-By'));",
+                  "pm.test('nosniff', () => pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff'));",
+                  "pm.test('same-origin', () => pm.expect(pm.response.headers.get('Cross-Origin-Resource-Policy')).to.eql('same-origin'));",
+                  "pm.test('no-store', () => pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/all",
+            "description": "No Server header; nosniff, same-origin, no-store.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7 Sessions and rate limit",
+      "description": "Run last: these use up the 5 /auth calls per minute.",
+      "item": [
+        {
+          "name": "Basic user logs out: revoke refresh token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/auth/revoke-token",
+            "description": "Clears the stored refresh token hash.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{basicToken}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Refresh with the revoked token (A14)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/auth/refresh-token",
+            "description": "The revoked refresh token no longer works.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"token\": \"{{basicToken}}\", \"refreshToken\": \"{{basicRefreshToken}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Login flood (A11)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "{",
+                  "const n = +(pm.collectionVariables.get('floodCount') || 0) + 1;",
+                  "pm.collectionVariables.set('floodCount', n);",
+                  "if (pm.response.code === 429 || n >= 8) {",
+                  "    pm.collectionVariables.set('floodCount', 0);",
+                  "    pm.test(`429 Too Many Requests after ${n} tries`, () => pm.response.to.have.status(429));",
+                  "} else {",
+                  "    pm.execution.setNextRequest(pm.info.requestName);",
+                  "}",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Unknown user, so no account gets locked. In the Runner it repeats until 429; by hand, click Send until 429. Limit: 5 /auth calls per minute per IP.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"userName\": \"nobody@cloudbase.com\", \"password\": \"wrong-password\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:7000"
+    },
+    {
+      "key": "productDirectUrl",
+      "value": "https://localhost:7280"
+    },
+    {
+      "key": "rabbitUrl",
+      "value": "http://127.0.0.1:15672"
+    },
+    {
+      "key": "adminUser",
+      "value": "admin@cloudbase.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "basicUser",
+      "value": "basic@cloudbase.com"
+    },
+    {
+      "key": "basicPassword",
+      "value": ""
+    },
+    {
+      "key": "rabbitUser",
+      "value": ""
+    },
+    {
+      "key": "rabbitPassword",
+      "value": ""
+    }
+  ]
+}

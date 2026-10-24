@@ -21,33 +21,43 @@ if [ ! -f "$KEYS/jwt-private.pem" ]; then
   echo "created JWT key pair"
 fi
 
+SERVER="keyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth"
+
+# issue NAME CN EXTENSIONS: NAME.key and NAME.crt signed by the project CA (run inside $KEYS/tls).
+issue() {
+  openssl req -new -newkey rsa:2048 -nodes -keyout "$1.key" -out "$1.csr" -subj "/CN=$2" 2> /dev/null
+  printf "basicConstraints=CA:FALSE\n$3\n" > "$1.ext"
+  openssl x509 -req -in "$1.csr" -CA ca.crt -CAkey ca.key -CAcreateserial -out "$1.crt" -days 825 -extfile "$1.ext" 2> /dev/null
+  rm -f "$1.csr" "$1.ext" ca.srl
+}
+
+# pfx NAME: NAME.pfx for .NET (no password), then drop the separate key and certificate.
+pfx() {
+  openssl pkcs12 -export -inkey "$1.key" -in "$1.crt" -out "$1.pfx" -passout pass:
+  rm -f "$1.key" "$1.crt"
+}
+
 if [ ! -f "$KEYS/tls/ca.crt" ]; then
   (
     cd "$KEYS/tls"
     openssl req -x509 -new -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 825 -subj "/CN=MCSC6002 Dev CA" \
       -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" 2> /dev/null
-    openssl req -new -newkey rsa:2048 -nodes -keyout service.key -out service.csr -subj "/CN=localhost" 2> /dev/null
-    printf "basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost\n" > service.ext
-    openssl x509 -req -in service.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out service.crt -days 825 -extfile service.ext 2> /dev/null
-    openssl req -new -newkey rsa:2048 -nodes -keyout gateway-client.key -out gateway-client.csr -subj "/CN=api-gateway" 2> /dev/null
-    printf "basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth\n" > client.ext
-    openssl x509 -req -in gateway-client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out gateway-client.crt -days 825 -extfile client.ext 2> /dev/null
-    openssl pkcs12 -export -inkey service.key -in service.crt -out service.pfx -passout pass:
-    openssl pkcs12 -export -inkey gateway-client.key -in gateway-client.crt -out gateway-client.pfx -passout pass:
-    rm -f ./*.csr ./*.ext ca.srl
+    issue service localhost "$SERVER\nsubjectAltName=DNS:localhost" && pfx service
+    issue gateway-client api-gateway "keyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth" && pfx gateway-client
   )
-  echo "created project CA, service and gateway certificates"
+  echo "created project CA, service and gateway client certificates"
 fi
 
-# Separate from the CA block so existing key folders get it too.
-if [ ! -f "$KEYS/tls/rabbitmq.crt" ]; then
-  (
-    cd "$KEYS/tls"
-    openssl req -new -newkey rsa:2048 -nodes -keyout rabbitmq.key -out rabbitmq.csr -subj "/CN=rabbitmq" 2> /dev/null
-    printf "basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n" > rabbitmq.ext
-    openssl x509 -req -in rabbitmq.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out rabbitmq.crt -days 825 -extfile rabbitmq.ext 2> /dev/null
-    rm -f rabbitmq.csr rabbitmq.ext ca.srl
-  )
+# One server certificate per container, named for its Docker host name and localhost (host-side tests).
+for name in identity product inventory gateway; do
+  [ -f "$KEYS/tls/$name.pfx" ] && continue
+  (cd "$KEYS/tls" && issue "$name" "$name" "$SERVER\nsubjectAltName=DNS:$name,DNS:localhost" && pfx "$name")
+  echo "created $name server certificate"
+done
+
+# Reissued when it lacks the Docker host name (older key folders).
+if ! openssl x509 -in "$KEYS/tls/rabbitmq.crt" -noout -ext subjectAltName 2> /dev/null | grep -q "DNS:rabbitmq"; then
+  (cd "$KEYS/tls" && issue rabbitmq rabbitmq "$SERVER\nsubjectAltName=DNS:rabbitmq,DNS:localhost,IP:127.0.0.1")
   echo "created RabbitMQ certificate"
 fi
 
