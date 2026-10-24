@@ -1,5 +1,5 @@
 # MCSC6002_System
-System-level artifacts for the Secure Microservices Inventory System: threat model, architecture diagrams, deployment.
+Deployment and tests for the Secure Microservices Inventory System: Docker Compose, setup and run scripts, the attack suite and a Postman collection.
 
 ## Run it
 Needs Docker Desktop and Git Bash; the .NET 10 SDK only for the attack suite. Clone all seven repos into one folder, then from `MCSC6002_System`:
