@@ -67,7 +67,10 @@ BASIC=$(login basic@cloudbase.com "$SEED_BASIC_PASSWORD"); need_token "$BASIC" b
 LOGIN_AT=$SECONDS
 echo "${GR}← HTTP 200${N}  ${DIM}{\"token\":\"$(mask "$BASIC")\", ...}${N}"
 claims "$BASIC" "print('basic user may:', ', '.join(x.removeprefix('Permission.') for x in dec(p)['permission']))"
-BRAND=$(curl -sk -H "Authorization: Bearer $ADMIN" $G/product-service/brands/all | json "d['data'][0]['id']")
+BRAND=$(curl -sk -H "Authorization: Bearer $ADMIN" $G/product-service/brands/all | json "(d.get('data') or [{}])[0].get('id', '')" 2> /dev/null)
+# A fresh database has no brands, and Product answers 400 to an empty list: create one.
+[ -n "$BRAND" ] || BRAND=$(curl -sk -X POST -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{"name":"Demo brand","description":"live demo"}' $G/product-service/brands/create | json "d['data']")
 PRODUCT="{\"brandId\":$BRAND,\"name\":\"Demo widget\",\"description\":\"live demo\",\"quantity\":3,\"reOrderThreshold\":1}"
 show "curl -X POST $G/product-service/products/create -H \"Authorization: Bearer $(mask "$BASIC")\" -d '$PRODUCT'"
 M=$(mark)

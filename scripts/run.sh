@@ -13,8 +13,12 @@ fi
 
 # Compose starts the services once SQL Server and RabbitMQ are healthy.
 docker compose build --quiet
-if ! docker compose up -d; then
-  if docker compose logs sqlserver 2> /dev/null | grep -q "Password did not match"; then
+UP=$(mktemp); trap 'rm -f "$UP"' EXIT
+if ! docker compose up -d 2>&1 | tee "$UP"; then
+  if grep -q "port is already allocated\|address already in use\|ports are not available" "$UP"; then
+    echo "A port is taken by another program (see the error above). Stop that program, then run again."
+    echo "Ports used on 127.0.0.1: 7000 (gateway), 7284, 7280, 7148 (services), 5671, 15672 (RabbitMQ)."
+  elif docker compose logs sqlserver 2> /dev/null | grep -q "Password did not match"; then
     echo "SQL Server rejects the sa password: its data volume was created with an older .env."
     echo "Reset it (deletes all data): docker compose down -v, then bash scripts/run.sh"
   else

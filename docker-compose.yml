@@ -1,9 +1,10 @@
 # The whole system: infrastructure and the four services, built from the sibling repositories.
 # Credentials come from .env (never committed); see .env.example. Keys and certificates come from ../keys
 # (scripts/setup.sh); each service mounts only the files it needs, read-only.
-# Ports bind to 127.0.0.1 so nothing is reachable from the network. The service ports are published
-# only for the attack suite and the demo, which show that direct calls fail mutual TLS.
-name: mcsc6002
+# Ports bind to 127.0.0.1 so nothing is reachable from the network. SQL Server and Redis are not published
+# at all; the service and RabbitMQ ports are published only for the attack suite, the demo and Postman.
+# A project name of its own keeps these containers and volumes apart from any other Compose project.
+name: mcsc6002-secure-inventory
 
 x-service: &service
   restart: unless-stopped
@@ -16,8 +17,6 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?set SQL_SA_PASSWORD in .env}
-    ports:
-      - "127.0.0.1:1433:1433"
     volumes:
       - sqldata:/var/opt/mssql
     healthcheck:
@@ -48,8 +47,6 @@ services:
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
-    ports:
-      - "127.0.0.1:6379:6379"
 
   identity:
     <<: *service

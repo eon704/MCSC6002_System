@@ -97,7 +97,7 @@
           }
         },
         {
-          "name": "Pick a brand",
+          "name": "Admin creates a brand",
           "event": [
             {
               "listen": "test",
@@ -105,16 +105,16 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.collectionVariables.set('brandId', pm.response.json().data[0].id);"
+                  "pm.collectionVariables.set('brandId', pm.response.json().data);"
                 ]
               }
             }
           ],
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [],
-            "url": "{{baseUrl}}/product-service/brands/all",
-            "description": "First brand id, used to create products.",
+            "url": "{{baseUrl}}/product-service/brands/create",
+            "description": "Brand for the products created later; works on an empty database too.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -123,6 +123,15 @@
                   "value": "{{adminToken}}"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Postman brand\", \"description\": \"attack demo\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
@@ -132,35 +141,6 @@
       "name": "1 Normal use",
       "description": "The system works for allowed actions.",
       "item": [
-        {
-          "name": "Basic user reads products (A8)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/product-service/products/all",
-            "description": "Read is allowed for the basic user.",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{basicToken}}"
-                }
-              ]
-            }
-          }
-        },
         {
           "name": "Admin creates a product, quantity 3",
           "event": [
@@ -234,6 +214,35 @@
                 {
                   "key": "token",
                   "value": "{{adminToken}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Basic user reads products (A8)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-service/products/all",
+            "description": "Read is allowed for the basic user.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{basicToken}}"
                 }
               ]
             }
@@ -504,8 +513,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.collectionVariables.set('errorsBefore', pm.response.json().messages || 0);"
+                  "pm.test('Queue read (404 = not created yet)', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));",
+                  "pm.collectionVariables.set('errorsBefore', pm.response.code === 404 ? 0 : pm.response.json().messages || 0);"
                 ]
               }
             }
@@ -514,7 +523,7 @@
             "method": "GET",
             "header": [],
             "url": "{{rabbitUrl}}/api/queues/%2F/ProductCreatedEventQueue_error",
-            "description": "Messages in the error queue now.",
+            "description": "Messages in the error queue now. On a new broker the queue does not exist until the first rejected event (404 = 0 messages).",
             "auth": {
               "type": "basic",
               "basic": [
