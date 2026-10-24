@@ -20,11 +20,11 @@ This project follows Option 2 (Secure System Architecture and Prototype). We bui
 
 The Identity service manages users, roles and permissions and issues tokens. The Product service manages brands and products; when a product is created or deleted it publishes an event. The Inventory service consumes these events and creates or removes the matching stock items, so stock follows the catalog without Product calling Inventory (eventual consistency). When Inventory returns stock items, it looks up product details through the gateway. All client traffic enters through the API gateway.
 
-Each service has its own database on one SQL Server instance. The Product service caches its product list in Redis. The services use .NET 10 with Clean Architecture, CQRS through MediatR, Entity Framework Core, FluentValidation and ASP.NET Core Identity, and MassTransit for RabbitMQ. Two shared NuGet libraries hold the permission constants and the request and response contracts. For local runs, SQL Server, RabbitMQ and Redis start with Docker Compose and the services run with `dotnet run`.
+Each service has its own database on one SQL Server instance. The Product service caches its product list in Redis. The services use .NET 10 with Clean Architecture, CQRS through MediatR, Entity Framework Core, FluentValidation and ASP.NET Core Identity, and MassTransit for RabbitMQ. Two shared NuGet libraries hold the permission constants and the request and response contracts. Docker Compose runs the whole system: SQL Server, RabbitMQ, Redis and the four services, each built from its own repository and run as a non-root user.
 
 ### Changes from the proposal
 
-Three points differ from the proposal. Docker Compose runs SQL Server, RabbitMQ and Redis, but the four services run on the host, started together by one script (`scripts/run.sh`); container images for the services are future work. Users cannot register themselves: an administrator creates accounts, which suits an internal company inventory system. Queue messages are not encrypted field by field. The connection to RabbitMQ uses TLS, and events carry only product ids, names, quantities and reorder thresholds, so TLS in transit and the HMAC signature cover the risk.
+Two points differ from the proposal. Users cannot register themselves: an administrator creates accounts, which suits an internal company inventory system. Queue messages are not encrypted field by field. The connection to RabbitMQ uses TLS, and events carry only product ids, names, quantities and reorder thresholds, so TLS in transit and the HMAC signature cover the risk.
 
 ## 3. Architecture Design
 
@@ -48,7 +48,7 @@ Authorization is permission based. The gateway checks the permission claim requi
 
 ### 4.2 Secure communication
 
-The gateway listens only on HTTPS, with HSTS outside development. Between the gateway and the services we use mutual TLS. A project certificate authority issues a client certificate to the gateway, and each service accepts only a client certificate issued by that CA with the name `api-gateway`. The gateway in turn accepts only service certificates from the same CA and checks the host name. The services no longer listen on plain HTTP, so even a host inside the network cannot call a service directly. The connection to RabbitMQ also uses TLS: the broker accepts AMQP only on its TLS port, with a certificate from the same CA, and the services check that certificate and its host name. Its management interface is still plain HTTP, reachable only from the local machine.
+The gateway listens only on HTTPS, with HSTS outside development. Between the gateway and the services we use mutual TLS. A project certificate authority issues a client certificate to the gateway, and each service accepts only a client certificate issued by that CA with the name `api-gateway`. The gateway in turn accepts only service certificates from the same CA and checks the host name; each service has its own server certificate, named after its container. The services no longer listen on plain HTTP, so even a host inside the network cannot call a service directly. The connection to RabbitMQ also uses TLS: the broker accepts AMQP only on its TLS port, with a certificate from the same CA, and the services check that certificate and its host name. Its management interface is still plain HTTP, reachable only from the local machine.
 
 ### 4.3 Hashing and integrity
 
@@ -60,7 +60,7 @@ FluentValidation checks the create and update requests for length, range and all
 
 ### 4.5 Secrets and error handling
 
-No password or key in use is committed. The retired HS256 secret remains in early commits and, on purpose, in the attack suite, which shows it is rejected (test A4); early commits also hold old seed passwords that are no longer used. Infrastructure and seed passwords live in a git-ignored `.env` file and in each service's .NET user secrets; signing keys and certificates are kept outside all repositories. RabbitMQ uses its own account instead of the default guest user, Redis requires a password and SQL connections are encrypted, although the server certificate is not yet validated. The gateway returns generic error messages, also in place of server errors from the services, logs the details server side and removes headers that reveal the server software. It also adds `X-Content-Type-Options`, `Cross-Origin-Resource-Policy` and `Cache-Control: no-store`.
+No password or key in use is committed. The retired HS256 secret remains in early commits and, on purpose, in the attack suite, which shows it is rejected (test A4); early commits also hold old seed passwords that are no longer used. Infrastructure and seed passwords live in a git-ignored `.env` file, which Docker Compose passes to the containers as environment variables; signing keys and certificates are kept outside all repositories, and each container mounts only the files it needs, read-only. RabbitMQ uses its own account instead of the default guest user, Redis requires a password and SQL connections are encrypted, although the server certificate is not yet validated. The gateway returns generic error messages, also in place of server errors from the services, logs the details server side and removes headers that reveal the server software. It also adds `X-Content-Type-Options`, `Cross-Origin-Resource-Policy` and `Cache-Control: no-store`.
 
 ## 5. Threat Modelling and Mitigation
 
@@ -80,7 +80,7 @@ The main remaining risks are:
 
 ## 6. Testing and Validation
 
-We tested in four ways. A scripted suite of 37 attack cases (Appendix B) runs against the live system; 35 cases map to a threat ID and two are controls that show normal use still works. Semgrep scanned the source of all seven repositories, Gitleaks scanned their git history and OWASP ZAP ran an authenticated active scan of the 19 gateway routes that existed at the time. These three scans ran before the final changes (refresh token hashing, the 2 MB limit, hiding of service errors and broker TLS), which attack cases A14, V9 and N4 cover.
+We tested in four ways. A scripted suite of 37 attack cases (Appendix B) runs against the live system; 35 cases map to a threat ID and two are controls that show normal use still works. Semgrep scanned the source of all seven repositories, Gitleaks scanned their git history and OWASP ZAP ran an authenticated active scan of the 19 gateway routes that existed at the time. These three scans ran before the final changes (refresh token hashing, the 2 MB limit, hiding of service errors, broker TLS and the move to containers), which attack cases A14, V9 and N4 cover; the full suite was rerun on the containers and on a fresh clone of all repositories.
 
 All 37 attack cases pass. They cover forged, expired and wrongly signed tokens, privilege escalation, refresh token reuse and use after logout, rate limiting and lockout, direct calls to services without the gateway certificate, plain connections to the message broker, SQL injection and oversized or malformed input, and events published straight to RabbitMQ by an attacker with broker credentials.
 
@@ -96,7 +96,7 @@ Several defects appeared only when we attacked the running system: the middlewar
 
 ## 8. Conclusion
 
-The prototype delivers the security controls promised in the proposal: RS256 tokens with short lifetimes and hashed, rotating refresh tokens, permission checks at the gateway and in every service, mutual TLS between them, TLS to the message broker, signed queue events, input validation and protection against password guessing. The threat model and the test results show how each control maps to a threat and that it works. The remaining work is refresh token reuse detection, protection against replayed events, an audit log and container images for the services themselves.
+The prototype delivers the security controls promised in the proposal: RS256 tokens with short lifetimes and hashed, rotating refresh tokens, permission checks at the gateway and in every service, mutual TLS between them, TLS to the message broker, signed queue events, input validation and protection against password guessing. The threat model and the test results show how each control maps to a threat and that it works. The remaining work is refresh token reuse detection, protection against replayed events, an audit log and a secrets manager in place of environment variables.
 
 ## Team Contributions
 

@@ -1,6 +1,6 @@
 # Threat Model (STRIDE)
 
-Secure Microservices Inventory System. State as of 2026-10-23.
+Secure Microservices Inventory System. State as of 2026-10-24.
 
 ## Method
 
@@ -23,7 +23,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | ID | Boundary | Control |
 |---|---|---|
 | TB1 | Internet -> API Gateway | HTTPS, JWT, permission check per route |
-| TB2 | Gateway -> services | mTLS, project CA only, CN=api-gateway |
+| TB2 | Gateway -> services | mTLS, project CA only, CN=api-gateway; one server certificate per service |
 | TB3 | Services -> RabbitMQ | Own broker account (not guest), shared by both services; AMQP over TLS only (project CA cert, checked by services); management API plain HTTP, localhost only; HMAC-SHA256 signed events, 5-min replay window |
 | TB4 | Services -> SQL Server, Redis | EF Core; SQL Encrypt=True (cert not verified); Redis password |
 | TB5 | Inventory -> Gateway (product lookup) | HTTPS (gateway cert checked against the project CA), forwarded user JWT |
@@ -36,7 +36,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | S2 | Spoofing | All | Algorithm confusion (none, HS256, RS384) | High | ValidAlgorithms pinned to RS256 (incl. refresh) | Done |
 | S3 | Spoofing | Services | Direct call bypassing gateway | High | mTLS; services reject any client cert except gateway's | Done |
 | S4 | Spoofing | Identity | Password brute force / weak passwords | High | Gateway 5 req/min per IP on /auth/*; lockout after 5 failures (15 min); min 12 chars (NIST 800-63B: length over composition) and 6 unique (our rule), enforced on user creation; seeded users get random 24-char passwords. Accepted residual: lockout lets an attacker lock a known account | Done |
-| S5 | Spoofing | RabbitMQ | Fake events published by anyone with broker access | High | Own broker account (not guest) from user-secrets; Inventory accepts only events HMAC-signed with a key shared by Product and Inventory | Done |
+| S5 | Spoofing | RabbitMQ | Fake events published by anyone with broker access | High | Own broker account (not guest) from .env; Inventory accepts only events HMAC-signed with a key shared by Product and Inventory | Done |
 | T1 | Tampering | Gateway, services | Edited JWT payload (add permission) | High | Signature validated at gateway and again in service | Done |
 | T2 | Tampering | TB2 | MITM between gateway and services | High | TLS + mTLS, custom CA trust, hostname check | Done |
 | T3 | Tampering | RabbitMQ | Modified or replayed event (Quantity, ProductId) | High | HMAC over type + timestamp + serialized message, checked in a consume filter; rejects go to the _error queue (done). AMQP over TLS with project CA cert, plain port closed (done). Open: replays within 5 min; one key shared by Product and Inventory, so Inventory could also sign events. Planned: message ids, per-service keys | Partial |
@@ -46,7 +46,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | I1 | Info disclosure | Gateway | Exception messages and internal URLs in responses | Medium | Generic messages; details to server log | Done |
 | I2 | Info disclosure | Services | Dev exception page (stack trace) passed through gateway | Medium | Gateway replaces every downstream 5xx body with a generic message; direct calls blocked by mTLS | Done |
 | I3 | Info disclosure | Gateway | Server header fingerprinting | Low | Server/X-Powered-By stripped, incl. downstream copies | Done |
-| I4 | Info disclosure | Repos | Secrets in git: seed passwords, RabbitMQ creds, old HS256 secret in history | High | DB/broker/Redis/seed passwords moved to user-secrets (.env, git-ignored); HS256 secret in history but unused; all services share SQL sa login | Partial |
+| I4 | Info disclosure | Repos | Secrets in git: seed passwords, RabbitMQ creds, old HS256 secret in history | High | DB/broker/Redis/seed passwords moved to a git-ignored .env, passed to the containers as environment variables; HS256 secret in history but unused; all services share SQL sa login | Partial |
 | I5 | Info disclosure | Identity DB | Refresh tokens stored in plaintext | Medium | Only the SHA-256 hash is stored; constant-time compare | Done |
 | I6 | Info disclosure | JWT | Email and phone in readable token payload | Low | Keep only id and permissions | Planned |
 | I7 | Info disclosure | TB4 | SQL traffic unencrypted | Medium | Encrypt=True (done); trusted server cert instead of TrustServerCertificate=True (planned) | Partial |
@@ -57,7 +57,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | E2 | EoP | Clients | Stolen access token reused | Medium | 15-min lifetime; refresh token rotated on each use | Done |
 | E3 | EoP | Identity | Old access token + leaked refresh token -> new session | Medium | Rotation, 1-day expiry, revoke on logout (/auth/revoke-token) (done); reuse detection (planned) | Partial |
 | E4 | EoP | Services | BOLA/IDOR on records | Low | No per-user records in current model; revisit if ownership added | N/A |
-| E5 | EoP | mTLS | Stolen gateway cert (PFX without password, no revocation) | Medium | Restrict file access, Docker secrets, short validity; CRL if needed | Planned |
+| E5 | EoP | mTLS | Stolen gateway cert (PFX without password, no revocation) | Medium | Mounted read-only into the gateway container only; password, Docker secrets, short validity, CRL if needed | Planned |
 
 ## Summary
 

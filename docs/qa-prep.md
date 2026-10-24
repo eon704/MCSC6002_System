@@ -39,8 +39,8 @@ Product does not wait for Inventory, and events stay in the queue if Inventory i
 **11. Why Ocelot?**
 It is a .NET gateway configured per route, including authentication and the required permission claim. Its delegating handlers let us replace the body of any server error (5xx) from a service with a generic message.
 
-**12. Why are the services not containerized?**
-The proposal planned it. We run the infrastructure in Docker and start the four services with one script; container images are listed as future work.
+**12. How is the system deployed?**
+Docker Compose runs everything: SQL Server, RabbitMQ, Redis and the four services, each built from its own repository and run as a non-root user. Each container mounts only its own keys, read-only, and gets passwords from `.env`. Ports are published on 127.0.0.1 only.
 
 **13. Is the database connection secure?**
 It is encrypted, but the server certificate is not verified and all services share the sa login (I7, I4). The fix is a trusted server certificate and one login per service.
@@ -49,4 +49,4 @@ It is encrypted, but the server certificate is not verified and all services sha
 Dependencies. MassTransit 9 needs a commercial license, which crashed two services until we moved to version 8. A clean build also pulled an unrelated AuthLibrary 2.0.0 from nuget.org (dependency confusion); we now bundle our packages and map those names to them only.
 
 **15. What would you do before production?**
-Replay protection, refresh token reuse detection, an audit log, container images with a secrets manager, one database login per service, and certificate revocation.
+Replay protection, refresh token reuse detection, an audit log, a secrets manager instead of environment variables, one database login per service, and certificate revocation.

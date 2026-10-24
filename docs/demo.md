@@ -26,7 +26,8 @@ Run `bash scripts/demo.sh` and press Enter for each step. Each step prints the r
 
 - Login returns 429: the 1-minute login limit was hit. Wait a minute.
 - Login fails for a seeded user: the account may be locked for 15 minutes after failed attempts. Use the other seeded user, or wait.
-- "Service Unavailable" from the gateway: a service stopped. Check `logs/`, then `bash scripts/run.sh` again.
+- "Service Unavailable" from the gateway: a service stopped. Check `docker compose logs <service>`, then `bash scripts/run.sh` again.
+- Step 5 wording: since the services run in Docker, curl reports "server closed abruptly" instead of `SEC_E_CERT_UNKNOWN` (as in the recording). Both are the rejected handshake.
 - Video does not play during the talk: move on to slides 12 to 14.
 
 ## Recording the video for slide 11
