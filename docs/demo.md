@@ -1,6 +1,6 @@
 # Demo Run Sheet
 
-About 3 minutes. Matches slide 9.
+About 3 minutes. Matches slide 11.
 
 ## Before the talk
 
@@ -18,7 +18,7 @@ Run `bash scripts/demo.sh` and press Enter for each step.
 | 2 | Basic user creates a product | HTTP 403 | E1 |
 | 3 | Admin creates a product, quantity 3 | 3 stock items with barcodes | - |
 | 4 | Token payload edited to add Create | 401 "Invalid token." | T1 |
-| 5 | Direct call to Product, no gateway certificate | curl exit 56, TLS rejected | S3 |
+| 5 | Direct call to Product, no gateway certificate | curl fails at the TLS handshake | S3 |
 | 6 | Unsigned event published to RabbitMQ | 0 stock items, error queue +1 | S5 |
 | 7 | Full attack suite (waits out the 1-minute login limit if needed) | 37/37 passed | all |
 

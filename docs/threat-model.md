@@ -6,7 +6,7 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 
 - STRIDE per component and trust boundary.
 - Risk = Likelihood x Impact, each Low/Medium/High; risk shown before mitigation.
-- Status: Done (implemented and tested), Partial, Planned, Open (no owner yet).
+- Status: Done (implemented and checked, by the attack suite or by hand), Partial, Planned, N/A (does not apply to this design).
 
 ## Assets
 
@@ -24,9 +24,9 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 |---|---|---|
 | TB1 | Internet -> API Gateway | HTTPS, JWT, permission check per route |
 | TB2 | Gateway -> services | mTLS, project CA only, CN=api-gateway |
-| TB3 | Services -> RabbitMQ | Dedicated broker user; AMQP over TLS only (project CA cert, checked by services); HMAC-SHA256 signed events, 5-min replay window |
+| TB3 | Services -> RabbitMQ | Own broker account (not guest), shared by both services; AMQP over TLS only (project CA cert, checked by services); management API plain HTTP, localhost only; HMAC-SHA256 signed events, 5-min replay window |
 | TB4 | Services -> SQL Server, Redis | EF Core; SQL Encrypt=True (cert not verified); Redis password |
-| TB5 | Inventory -> Gateway (product lookup) | HTTPS, forwarded user JWT |
+| TB5 | Inventory -> Gateway (product lookup) | HTTPS (gateway cert checked against the project CA), forwarded user JWT |
 
 ## Threats
 
@@ -35,11 +35,11 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 | S1 | Spoofing | All | Forged JWT using shared HS256 secret (was in 4 configs) | High | RS256; private key only in Identity, others get public key | Done |
 | S2 | Spoofing | All | Algorithm confusion (none, HS256, RS384) | High | ValidAlgorithms pinned to RS256 (incl. refresh) | Done |
 | S3 | Spoofing | Services | Direct call bypassing gateway | High | mTLS; services reject any client cert except gateway's | Done |
-| S4 | Spoofing | Identity | Password brute force / weak passwords | High | Gateway 5 req/min per IP on /auth/*; lockout after 5 failures (15 min); min 12 chars, 6 unique (NIST 800-63B), enforced on user creation | Done |
-| S5 | Spoofing | RabbitMQ | Fake events published by anyone with broker access | High | Dedicated broker user from user-secrets; Inventory accepts only events HMAC-signed with a key shared by Product and Inventory | Done |
+| S4 | Spoofing | Identity | Password brute force / weak passwords | High | Gateway 5 req/min per IP on /auth/*; lockout after 5 failures (15 min); min 12 chars (NIST 800-63B: length over composition) and 6 unique (our rule), enforced on user creation; seeded users get random 24-char passwords. Accepted residual: lockout lets an attacker lock a known account | Done |
+| S5 | Spoofing | RabbitMQ | Fake events published by anyone with broker access | High | Own broker account (not guest) from user-secrets; Inventory accepts only events HMAC-signed with a key shared by Product and Inventory | Done |
 | T1 | Tampering | Gateway, services | Edited JWT payload (add permission) | High | Signature validated at gateway and again in service | Done |
 | T2 | Tampering | TB2 | MITM between gateway and services | High | TLS + mTLS, custom CA trust, hostname check | Done |
-| T3 | Tampering | RabbitMQ | Modified or replayed event (Quantity, ProductId) | High | HMAC over type + timestamp + body, checked in a consume filter; rejects go to the _error queue (done). AMQP over TLS with project CA cert, plain port closed (done). Replays within 5 min (planned) | Partial |
+| T3 | Tampering | RabbitMQ | Modified or replayed event (Quantity, ProductId) | High | HMAC over type + timestamp + serialized message, checked in a consume filter; rejects go to the _error queue (done). AMQP over TLS with project CA cert, plain port closed (done). Open: replays within 5 min; one key shared by Product and Inventory, so Inventory could also sign events. Planned: message ids, per-service keys | Partial |
 | T4 | Tampering | Services, DB | SQL injection | Medium | EF Core parameterized queries; FluentValidation in all three services (Inventory: known statuses only) | Done |
 | T5 | Tampering | Build | Dependency confusion: shared AuthLibrary/ResponseLibrary are not on nuget.org, which hosts unrelated packages with the same names; a clean restore pulled AuthLibrary 2.0.0 | High | Exact packages bundled in each repo (nuget-local); nuget.config packageSourceMapping limits both names to that folder | Done |
 | R1 | Repudiation | Product, Inventory | No record of who changed products or stock | Medium | Audit log with user id (NameIdentifier) per write | Planned |
@@ -70,6 +70,6 @@ Secure Microservices Inventory System. State as of 2026-10-23.
 
 ## Top open risks
 
-- T3: signed events can be replayed within 5 minutes.
+- T3: signed events can be replayed within 5 minutes; Product and Inventory share one HMAC key.
 - R1: no audit log of who changed products or stock.
 - E3: a leaked refresh token works once; no reuse detection.

@@ -2,7 +2,7 @@
 System-level artifacts for the Secure Microservices Inventory System: threat model, architecture diagrams, deployment.
 
 ## Run it
-Needs Docker Desktop, the .NET 10 SDK and Git Bash. Clone all six repos into one folder, then from `MCSC6002_System`:
+Needs Docker Desktop, the .NET 10 SDK and Git Bash. Clone all seven repos into one folder, then from `MCSC6002_System`:
 
 ```bash
 bash scripts/setup.sh    # once: JWT keys, mTLS certs, .env with random passwords, user-secrets
