@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One-time setup on a fresh machine: JWT keys, mTLS certificates, .env with random passwords, user-secrets.
+# One-time setup on a fresh machine: JWT keys, mTLS certificates, .env with random passwords.
 # Skips anything that already exists. Run from MCSC6002_System (Git Bash on Windows).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export MSYS_NO_PATHCONV=1
 
-for tool in openssl dotnet docker; do
+for tool in openssl docker; do
   command -v "$tool" > /dev/null || { echo "missing: $tool"; exit 1; }
 done
 for repo in MCSC6002_ApiGateway MCSC6002_IdentityService MCSC6002_ProductService MCSC6002_InventoryService; do
@@ -42,10 +42,9 @@ if [ ! -f "$KEYS/tls/ca.crt" ]; then
     cd "$KEYS/tls"
     openssl req -x509 -new -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 825 -subj "/CN=MCSC6002 Dev CA" \
       -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" 2> /dev/null
-    issue service localhost "$SERVER\nsubjectAltName=DNS:localhost" && pfx service
     issue gateway-client api-gateway "keyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth" && pfx gateway-client
   )
-  echo "created project CA, service and gateway client certificates"
+  echo "created project CA and gateway client certificate"
 fi
 
 # One server certificate per container, named for its Docker host name and localhost (host-side tests).
@@ -77,5 +76,4 @@ EOF
   echo "created .env with random passwords (seeded users: admin@cloudbase.com, basic@cloudbase.com)"
 fi
 
-bash scripts/set-user-secrets.sh
 echo "setup done; next: bash scripts/run.sh"

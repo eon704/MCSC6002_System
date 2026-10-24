@@ -25,15 +25,15 @@ call() {
   echo "${color}← HTTP $CODE${N}  ${DIM}${text}${N}"
 }
 
-# evidence LOG MARK PATTERN: first matching line written to logs/LOG.log after line MARK (waits up to 10 s).
-mark() { wc -l < "logs/$1.log"; }
+# evidence SERVICE MARK PATTERN: first matching line the container logged since time MARK (waits up to 10 s).
+mark() { date -u -d '-1 sec' +%Y-%m-%dT%H:%M:%SZ; } # 1 s margin for clock skew with Docker.
 evidence() {
   local hit=""
   for _ in $(seq 10); do
-    hit=$(tail -n +"$(($2 + 1))" "logs/$1.log" | grep -a -m1 "$3" | sed 's/^ *//')
+    hit=$(docker compose logs "$1" --no-log-prefix --since "$2" 2> /dev/null | grep -a -m1 "$3" | sed 's/^ *//')
     [ -n "$hit" ] && break; sleep 1
   done
-  echo "${DIM}logs/$1.log:${N} ${hit:-(no log line)}"
+  echo "${DIM}$1 log:${N} ${hit:-(no log line)}"
 }
 
 login() { curl -sk -X POST -H "Content-Type: application/json" -d "{\"userName\":\"$1\",\"password\":\"$2\"}" $G/auth/login | json "d['data']['token']"; }
@@ -61,14 +61,14 @@ claims "$BASIC" "print('basic user may:', ', '.join(x.removeprefix('Permission.'
 BRAND=$(curl -sk -H "Authorization: Bearer $ADMIN" $G/product-service/brands/all | json "d['data'][0]['id']")
 PRODUCT="{\"brandId\":$BRAND,\"name\":\"Demo widget\",\"description\":\"live demo\",\"quantity\":3,\"reOrderThreshold\":1}"
 show "curl -X POST $G/product-service/products/create -H \"Authorization: Bearer $(mask "$BASIC")\" -d '$PRODUCT'"
-M=$(mark gateway)
+M=$(mark)
 call POST /product-service/products/create "$BASIC" "$PRODUCT"
 evidence gateway "$M" "ClaimValueNotAuthorizedError" | sed 's/claim value: .* is not the same as/… is not the same as/'
 why "The route needs Products.Create. The gateway refuses before Product is called; Product would check it again."
 
 step "Step 3 · Admin creates a product (quantity 3); Inventory gets the signed event"
 show "curl -X POST $G/product-service/products/create -H \"Authorization: Bearer $(mask "$ADMIN")\" -d '$PRODUCT'"
-M=$(mark inventory)
+M=$(mark)
 call POST /product-service/products/create "$ADMIN" "$PRODUCT"
 ID=$(json "d['data']" < "$BODY")
 evidence inventory "$M" "Product $ID created"
@@ -84,7 +84,7 @@ h,p,s=sys.stdin.read().strip().split('.'); raw=base64.urlsafe_b64decode(p+'==').
 print(h+'.'+base64.urlsafe_b64encode(raw.replace('Products.Read','Products.Create').encode()).decode().rstrip('=')+'.'+s)")
 echo "payload edit: \"Permission.Product.Products.Read\" → \"Permission.Product.Products.Create\"; signature kept as it was"
 show "curl -X POST $G/product-service/products/create -H \"Authorization: Bearer $(mask "$TAMPERED")\" -d '$PRODUCT'"
-M=$(mark gateway)
+M=$(mark)
 call POST /product-service/products/create "$TAMPERED" "$PRODUCT"
 evidence gateway "$M" "UnauthenticatedError: Request" | sed 's/Client has NOT been authenticated.* \(UnauthenticatedError\)/\1/'
 why "The RS256 signature covers the header and payload; any edit breaks it, and only Identity's private key can re-sign."
@@ -105,7 +105,7 @@ BEFORE=$(errors)
 EVENT="{\"Id\":$FAKE,\"Name\":\"forged\",\"Quantity\":3,\"ReOrderThreshold\":0}"
 echo "event body: $EVENT   (no signature headers)"
 show "curl -u $RABBITMQ_USER:•••• -X POST http://127.0.0.1:15672/api/exchanges/%2F/$EXCHANGE/publish -d '{...event...}'"
-M=$(mark inventory)
+M=$(mark)
 python -c "
 import json,uuid
 evt=json.loads('$EVENT')
