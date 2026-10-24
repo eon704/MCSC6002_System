@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Live demo, one step per Enter. Prerequisites: `docker compose up -d`, all four services running with
-# `dotnet run --launch-profile https`. Usage (from MCSC6002_System): bash scripts/demo.sh
+# Live demo, one step per Enter. Prerequisite: bash scripts/run.sh. Usage (from MCSC6002_System): bash scripts/demo.sh
 set -u
 source <(tr -d '\r' < .env)
 G=https://localhost:7000
@@ -49,7 +48,8 @@ curl -s -u "$RABBITMQ_USER:$RABBITMQ_PASSWORD" -H "Content-Type: application/jso
   "http://127.0.0.1:15672/api/exchanges/%2F/ResponseLibrary.Models.Requests.Product.Events:ProductCreatedEvent/publish"; echo
 sleep 3
 curl -sk -H "Authorization: Bearer $ADMIN" $G/inventory-service/items/get-by-product-id/$FAKE | json "f\"stock items for forged product $FAKE: {len(d.get('data') or [])}\""
-echo "error queue: $BEFORE -> $(errors) messages"
+for _ in $(seq 10); do AFTER=$(errors); [ "$AFTER" -gt "$BEFORE" ] && break; sleep 1; done # Management stats lag ~5 s.
+echo "error queue: $BEFORE -> $AFTER messages"
 
 step "7. Full attack suite"
 WAIT=$((61 - (SECONDS - LOGIN_AT))); [ $WAIT -gt 0 ] && { echo "waiting ${WAIT}s for the login rate-limit window"; sleep $WAIT; }
